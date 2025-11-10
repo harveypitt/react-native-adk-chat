@@ -1,26 +1,31 @@
 {
   "name": "react-native-adk-chat",
   "version": "1.0.0",
-  "main": "index.ts",
+  "description": "React Native ADK Chat - Google Agent Engine integration with proxy service",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "example/demo-app"
+  ],
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "client": "npm run dev --workspace=packages/client",
+    "server": "npm run dev --workspace=packages/server",
+    "server:start": "npm start --workspace=packages/server",
+    "demo": "npm start --workspace=example/demo-app",
+    "install:all": "npm install && npm install --workspace=packages/server",
+    "clean": "rm -rf node_modules packages/*/node_modules example/*/node_modules"
   },
-  "dependencies": {
-    "@expo/vector-icons": "^15.0.3",
-    "expo": "~54.0.22",
-    "expo-status-bar": "~3.0.8",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "react-native": "0.81.5",
-    "react-native-safe-area-context": "~5.6.2",
-    "react-native-web": "^0.21.2"
-  },
-  "devDependencies": {
-    "@types/react": "~19.1.0",
-    "typescript": "~5.9.2"
-  },
-  "private": true
+  "keywords": [
+    "react-native",
+    "adk",
+    "agent-engine",
+    "google-cloud",
+    "chat",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
