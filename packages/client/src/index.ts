@@ -3,7 +3,7 @@ export { default as ChatInput } from "./components/ChatInput";
 export type { ChatInputProps } from "./components/ChatInput";
 
 export { default as MessageBubble } from "./components/MessageBubble";
-export type { Message, MessageBubbleProps } from "./components/MessageBubble";
+export type { Message, MessageBubbleProps, ToolCall } from "./components/MessageBubble";
 
 // API Clients
 export { ADKClient } from "./api/adkClient";
@@ -24,4 +24,5 @@ export type {
   CreateSessionResponse,
   ListSessionsResponse,
   ChatRequest,
+  ToolCallInfo,
 } from "./api/proxyClient";

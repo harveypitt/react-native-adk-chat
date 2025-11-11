@@ -7,7 +7,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Text,
-  Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -17,6 +16,7 @@ import {
   ChatInput,
   ProxyClient,
   type Message,
+  type ToolCall,
 } from "../../packages/client/src";
 
 // Configuration - use environment variables or defaults
@@ -55,9 +55,8 @@ export default function App() {
       if (healthy) {
         await initializeSession();
       } else {
-        Alert.alert(
-          "Connection Error",
-          `Cannot connect to proxy server at ${PROXY_BASE_URL}. Make sure the server is running.`
+        window.alert(
+          `Connection Error: Cannot connect to proxy server at ${PROXY_BASE_URL}. Make sure the server is running.`
         );
       }
     } catch (error) {
@@ -74,43 +73,50 @@ export default function App() {
       console.log("Session created:", newSessionId);
     } catch (error) {
       console.error("Failed to create session:", error);
-      Alert.alert(
-        "Session Error",
-        "Failed to create session. Please check your server connection."
+      window.alert(
+        "Session Error: Failed to create session. Please check your server connection."
       );
     }
   };
 
   const handleNewChat = async () => {
-    Alert.alert(
-      "New Chat",
-      "Start a new conversation? This will clear your current chat.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Start New Chat",
-          onPress: async () => {
-            try {
-              const response = await proxyClient.createSession(DEFAULT_USER_ID);
-              const newSessionId = response.output.id;
-              setSessionId(newSessionId);
-              setMessages([]);
-              setInput("");
-              console.log("New session created:", newSessionId);
-            } catch (error) {
-              console.error("Failed to create new session:", error);
-              Alert.alert(
-                "Error",
-                "Failed to create new session. Please try again."
-              );
-            }
-          },
-        },
-      ]
-    );
+    console.log("handleNewChat clicked, current messages count:", messages.length);
+
+    const createNewSession = async () => {
+      console.log("createNewSession called - clearing UI and creating new session");
+      try {
+        // Clear UI immediately
+        setMessages([]);
+        setInput("");
+        setIsLoading(false);
+
+        // Create new session
+        console.log("Calling proxyClient.createSession...");
+        const response = await proxyClient.createSession(DEFAULT_USER_ID);
+        const newSessionId = response.output.id;
+        setSessionId(newSessionId);
+        console.log("✅ New session created successfully:", newSessionId);
+      } catch (error) {
+        console.error("❌ Failed to create new session:", error);
+        window.alert(
+          "Error: Failed to create new session. Please try again."
+        );
+      }
+    };
+
+    // If no messages, just create new session without confirmation
+    if (messages.length === 0) {
+      console.log("No messages - creating session without confirmation");
+      await createNewSession();
+      return;
+    }
+
+    console.log("Messages exist - showing confirmation dialog");
+
+    // If there are messages, ask for confirmation
+    if (window.confirm("Start a new conversation? This will clear your current chat.")) {
+      await createNewSession();
+    }
   };
 
   const handleSend = async () => {
@@ -134,12 +140,14 @@ export default function App() {
       role: "assistant",
       content: "",
       timestamp: new Date(),
+      isLoading: true,
     };
 
     setMessages((prev) => [...prev, aiMessage]);
 
     try {
       let accumulatedText = "";
+      const toolCalls: ToolCall[] = [];
 
       // Send message with streaming callback
       await proxyClient.sendMessage(
@@ -154,7 +162,28 @@ export default function App() {
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === aiMessageId
-                ? { ...msg, content: accumulatedText }
+                ? { ...msg, content: accumulatedText, isLoading: false }
+                : msg
+            )
+          );
+        },
+        (toolName: string, status: 'calling' | 'complete', args?: any) => {
+          // Handle tool calls
+          const existingToolIndex = toolCalls.findIndex(t => t.name === toolName);
+
+          if (existingToolIndex >= 0) {
+            // Update existing tool call status
+            toolCalls[existingToolIndex] = { name: toolName, status, args };
+          } else {
+            // Add new tool call
+            toolCalls.push({ name: toolName, status, args });
+          }
+
+          // Update the message with tool calls
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId
+                ? { ...msg, toolCalls: [...toolCalls] }
                 : msg
             )
           );
@@ -174,14 +203,14 @@ export default function App() {
                 ...msg,
                 content:
                   "Sorry, I encountered an error. Please make sure the proxy server is running and try again.",
+                isLoading: false,
               }
             : msg
         )
       );
 
-      Alert.alert(
-        "Connection Error",
-        "Failed to connect to proxy server. Please ensure it's running at " +
+      window.alert(
+        "Connection Error: Failed to connect to proxy server. Please ensure it's running at " +
           PROXY_BASE_URL
       );
     }
@@ -203,8 +232,7 @@ export default function App() {
               onPress={handleNewChat}
               disabled={!isConnected}
             >
-              <Ionicons name="add-circle-outline" size={24} color="#111827" />
-              <Text style={styles.newChatText}>New Chat</Text>
+              <Ionicons name="add" size={28} color="#111827" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>ADK Chat</Text>
             <View style={styles.statusIndicator}>
@@ -300,18 +328,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   newChatButton: {
-    flexDirection: "row",
+    width: 40,
+    height: 40,
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    justifyContent: "center",
+    borderRadius: 20,
     backgroundColor: "#F9FAFB",
-  },
-  newChatText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#111827",
   },
   headerTitle: {
     fontSize: 17,

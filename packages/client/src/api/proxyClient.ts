@@ -41,6 +41,12 @@ export interface ChatRequest {
   run_config?: Record<string, any>;
 }
 
+export interface ToolCallInfo {
+  name: string;
+  status: 'calling' | 'complete';
+  args?: any;
+}
+
 export class ProxyClient {
   private config: ProxyConfig;
 
@@ -200,11 +206,13 @@ export class ProxyClient {
    * Send a chat message with streaming support
    * @param request - Chat request parameters
    * @param onChunk - Callback function for each streamed chunk
+   * @param onToolCall - Callback function for tool calls
    * @returns Promise<string> - The complete response text
    */
   async sendMessage(
     request: ChatRequest,
-    onChunk?: (chunk: string) => void
+    onChunk?: (chunk: string) => void,
+    onToolCall?: (toolName: string, status: 'calling' | 'complete', args?: any) => void
   ): Promise<string> {
     try {
       const response = await fetch(`${this.config.baseUrl}/chat`, {
@@ -255,6 +263,15 @@ export class ProxyClient {
             const data = JSON.parse(trimmed);
             // Extract text from Agent Engine format: content.parts[].text
             if (data.content && data.content.parts) {
+              // Check for tool calls
+              for (const part of data.content.parts) {
+                if (part.function_call && onToolCall) {
+                  onToolCall(part.function_call.name, 'calling', part.function_call.args);
+                } else if (part.function_response && onToolCall) {
+                  onToolCall(part.function_response.name, 'complete', part.function_response.response);
+                }
+              }
+
               const text = data.content.parts
                 .map((part: any) => part.text || "")
                 .filter(Boolean)
@@ -278,6 +295,15 @@ export class ProxyClient {
         try {
           const data = JSON.parse(buffer);
           if (data.content && data.content.parts) {
+            // Check for tool calls in remaining buffer
+            for (const part of data.content.parts) {
+              if (part.function_call && onToolCall) {
+                onToolCall(part.function_call.name, 'calling', part.function_call.args);
+              } else if (part.function_response && onToolCall) {
+                onToolCall(part.function_response.name, 'complete', part.function_response.response);
+              }
+            }
+
             const text = data.content.parts
               .map((part: any) => part.text || "")
               .filter(Boolean)
@@ -294,6 +320,7 @@ export class ProxyClient {
           console.warn("Failed to parse remaining buffer:", buffer, parseError);
         }
       }
+
 
       return fullText;
     } catch (error) {
