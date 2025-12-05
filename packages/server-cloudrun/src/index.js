@@ -271,6 +271,9 @@ app.post('/chat', async (req, res) => {
 
     console.log(`Chat request - App: ${appName}, User: ${user_id}, Session: ${session_id}, Message: "${message.substring(0, 50)}${message.length > 50 ? '...' : ''}"`);
 
+    // Map to track tool calls for this session. Key is functionCall.id
+    const toolCallsMap = new Map();
+
     // Build the request body for Cloud Run
     const requestBody = {
       app_name: appName,
@@ -354,23 +357,81 @@ app.post('/chat', async (req, res) => {
 
           const invocationId = data.invocationId || 'default';
 
-          // Check if this event has text content
+          // Check if this event has text content or function calls/responses
           let currentFullText = '';
           let hasTextContent = false;
+          let functionCallPart = null;
+          let functionResponsePart = null;
+
           if (data.content && data.content.parts) {
             for (const part of data.content.parts) {
               if (part.text) {
                 currentFullText += part.text;
                 hasTextContent = true;
               }
+              if (part.functionCall) {
+                functionCallPart = part.functionCall;
+              }
+              if (part.functionResponse) {
+                functionResponsePart = part.functionResponse;
+              }
             }
           }
 
-          if (hasTextContent) {
-            // Cloud Run streaming pattern:
+          if (functionCallPart) {
+            // Handle functionCall
+            const { id, name, args } = functionCallPart;
+            // Store a simplified tool call for client, marking as 'calling'
+            const clientToolCall = { id, name, args, status: 'calling' };
+            toolCallsMap.set(id, clientToolCall);
+
+            // Construct an SSE message for the client
+            const toolCallEvent = {
+                id: `tool-call-${id}-${Date.now()}`, // Unique message ID for this event
+                invocationId: data.invocationId,
+                author: data.author,
+                usageMetadata: data.usageMetadata,
+                role: 'model', // Agent is calling the tool
+                content: { parts: [] }, // No text content for this specific event
+                toolCalls: [clientToolCall], // Send the initial tool call status
+                timestamp: new Date()
+            };
+            if (DEBUG) console.log('Forwarding function call:', clientToolCall.name);
+            res.write(`data: ${JSON.stringify(toolCallEvent)}\n\n`);
+
+          } else if (functionResponsePart) {
+            // Handle functionResponse
+            const { id, name, response: toolResponseData } = functionResponsePart;
+            const existingToolCall = toolCallsMap.get(id);
+
+            if (existingToolCall) {
+              // Update the stored tool call with response and 'complete' status
+              existingToolCall.status = 'complete';
+              existingToolCall.response = toolResponseData; // Add the full response data
+
+              // Construct an SSE message for the client with the completed tool call
+              const toolResponseEvent = {
+                  id: `tool-response-${id}-${Date.now()}`, // Unique message ID for this event
+                  invocationId: data.invocationId,
+                  author: data.author,
+                  usageMetadata: data.usageMetadata,
+                  role: 'model', // Tool response is part of agent's output
+                  content: { parts: [] }, // No text content
+                  toolCalls: [existingToolCall], // Send the updated tool call
+                  timestamp: new Date()
+              };
+              if (DEBUG) console.log('Forwarding function response:', existingToolCall.name);
+              res.write(`data: ${JSON.stringify(toolResponseEvent)}\n\n`);
+              toolCallsMap.delete(id); // Clean up the map
+            } else {
+              if (DEBUG) console.warn(`Received function response for unknown tool call ID: ${id}`);
+            }
+
+          } else if (hasTextContent) {
+            // Cloud Run streaming pattern for text:
             // - Events with partial:true contain delta text (new text only)
             // - Final event (no partial flag) contains FULL accumulated text
-            // So we only forward partial events and skip the final one
+            // We only forward partial events and skip the final one to avoid duplication on client
 
             const isPartial = data.partial === true;
 
@@ -378,10 +439,10 @@ app.post('/chat', async (req, res) => {
               // Partial events contain delta text - forward as-is
               const deltaText = currentFullText;
 
-              // Update tracking
+              // Update tracking for client-side text reconciliation (if needed)
               allSentText += deltaText;
 
-              // Forward the delta
+              // Forward the delta as a standard text message event
               const deltaEvent = {
                 ...data,
                 content: {
@@ -389,16 +450,14 @@ app.post('/chat', async (req, res) => {
                   parts: [{ text: deltaText }]
                 }
               };
-              res.write(JSON.stringify(deltaEvent) + '\n');
+              res.write(`data: ${JSON.stringify(deltaEvent)}\n\n`);
             } else {
-              // Final event (not partial) - skip to avoid duplication
-              // The partial events already sent all the text
+              // Final event (not partial) - skip if text already sent via partials
               if (DEBUG) console.log('Skipping final text event (already sent via partials)');
             }
           } else {
-            // No text content (e.g., function calls) - skip for now
-            // TODO: Forward function calls when UI supports them
-            if (DEBUG) console.log('Skipping non-text event (function call, etc.)');
+            // Neither text, function call, nor function response.
+            if (DEBUG) console.log('Skipping unknown non-text event without function call/response');
           }
         }
       }

@@ -1,11 +1,13 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Animated } from "react-native";
+import { View, Text, StyleSheet, Animated, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 export interface ToolCall {
+  id: string; // Add id to ToolCall for tracking
   name: string;
   args?: any;
   status: 'calling' | 'complete';
+  response?: any; // Add this line to store the tool's complete response
 }
 
 export interface Message {
@@ -14,11 +16,12 @@ export interface Message {
   content: string;
   timestamp: Date;
   isLoading?: boolean;
-  toolCalls?: ToolCall[];
+  toolCalls?: ToolCall[]; // Array of tool calls
 }
 
 export interface MessageBubbleProps {
   message: Message;
+  onToolCallPress?: (toolCall: ToolCall) => void;
 }
 
 const LoadingIndicator = () => {
@@ -54,8 +57,8 @@ const LoadingIndicator = () => {
   );
 };
 
-const ToolCallIndicator: React.FC<{ toolCall: ToolCall }> = ({ toolCall }) => {
-  const opacity = useRef(new Animated.Value(0.4)).current;
+const ToolCallIndicator: React.FC<{ toolCall: ToolCall, onToolCallPress?: (toolCall: ToolCall) => void }> = ({ toolCall, onToolCallPress }) => {
+  const opacity = useRef(new Animated.Value(toolCall.status === 'calling' ? 0.6 : 1)).current;
 
   useEffect(() => {
     if (toolCall.status === 'calling') {
@@ -85,25 +88,47 @@ const ToolCallIndicator: React.FC<{ toolCall: ToolCall }> = ({ toolCall }) => {
     }
   }, [toolCall.status, opacity]);
 
+  const handlePress = () => {
+    if (onToolCallPress && toolCall.status === 'complete' && toolCall.response) {
+      onToolCallPress(toolCall);
+    }
+  };
+
+  const isCalling = toolCall.status === 'calling';
+  const isClickable = onToolCallPress && toolCall.status === 'complete' && toolCall.response;
+
   return (
-    <View style={styles.toolCallContainer}>
+    <TouchableOpacity
+      onPress={handlePress}
+      disabled={!isClickable}
+      style={[
+        styles.toolCallContainer,
+        isCalling && styles.toolCallContainerCalling,
+      ]}
+    >
       <Animated.View style={styles.toolCallIconContainer}>
         <Animated.View style={{ opacity }}>
           <Ionicons
-            name={toolCall.status === 'calling' ? "hammer" : "checkmark-circle"}
+            name={isCalling ? "hammer" : "checkmark-circle"}
             size={18}
-            color={toolCall.status === 'calling' ? "#6B7280" : "#10B981"}
+            color={isCalling ? colors.greyedOutText : colors.brandGreen}
           />
         </Animated.View>
       </Animated.View>
-      <Text style={styles.toolCallText} numberOfLines={1}>
+      <Text
+        style={[
+          styles.toolCallText,
+          isCalling && styles.toolCallTextCalling,
+        ]}
+        numberOfLines={1}
+      >
         {toolCall.name}
       </Text>
-    </View>
+    </TouchableOpacity>
   );
 };
 
-const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
+const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onToolCallPress }) => {
   const isUser = message.role === "user";
 
   return (
@@ -124,7 +149,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
       {message.toolCalls && message.toolCalls.length > 0 && (
         <View style={styles.toolCallsWrapper}>
           {message.toolCalls.map((toolCall, index) => (
-            <ToolCallIndicator key={index} toolCall={toolCall} />
+            <ToolCallIndicator key={toolCall.id || index} toolCall={toolCall} onToolCallPress={onToolCallPress} />
           ))}
         </View>
       )}
@@ -164,7 +189,12 @@ const colors = {
   aiMessageBorder: "#E5E7EB",
   background: "#FFFFFF",
   textSecondary: "#6B7280",
+  textSecondaryLight: "#A0A7B0",
   textPlaceholder: "#9CA3AF",
+  brandGreen: "#10B981",
+  greyedOutBg: "#F2F3F5",
+  greyedOutBorder: "#D1D5DB",
+  greyedOutText: "#A0A7B0",
 };
 
 const typography = {
@@ -251,12 +281,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 6,
     paddingHorizontal: 12,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: colors.aiMessageBg, // Default background
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.aiMessageBorder, // Default border
     alignSelf: "flex-start",
     minHeight: 32,
+  },
+  toolCallContainerCalling: {
+    backgroundColor: colors.greyedOutBg,
+    borderColor: colors.greyedOutBorder,
   },
   toolCallIconContainer: {
     width: 18,
@@ -267,9 +301,12 @@ const styles = StyleSheet.create({
   },
   toolCallText: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: colors.textSecondary, // Default text color
     fontWeight: "500",
     lineHeight: 18,
+  },
+  toolCallTextCalling: {
+    color: colors.greyedOutText,
   },
 });
 

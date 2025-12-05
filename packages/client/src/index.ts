@@ -24,5 +24,4 @@ export type {
   CreateSessionResponse,
   ListSessionsResponse,
   ChatRequest,
-  ToolCallInfo,
 } from "./api/proxyClient";

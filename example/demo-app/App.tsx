@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Text,
+  Switch, // Import Switch for the toggle
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -18,18 +19,31 @@ import {
   type Message,
   type ToolCall,
 } from "../../packages/client/src";
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import ToolResponseDebugScreen from '../../packages/client/src/screens/ToolResponseDebugScreen'; // Import the new screen
 
 // Configuration - use environment variables or defaults
 // Expo requires EXPO_PUBLIC_ prefix for client-side env vars
 const PROXY_BASE_URL = process.env.EXPO_PUBLIC_PROXY_BASE_URL || "http://localhost:3000";
 const DEFAULT_USER_ID = process.env.EXPO_PUBLIC_DEFAULT_USER_ID || "harvey_123";
 
-export default function App() {
+// Define the type for our navigation stack
+type RootStackParamList = {
+  Chat: undefined;
+  ToolResponseDebug: { toolCall: ToolCall };
+};
+
+const Stack = createStackNavigator<RootStackParamList>();
+
+// Main Chat Screen Component
+function ChatScreen({ navigation }: { navigation: any }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>("");
   const [isConnected, setIsConnected] = useState(false);
+  const [showResponseDebug, setShowResponseDebug] = useState(false); // New state for debug toggle
   const flatListRef = useRef<FlatList>(null);
   const proxyClient = useRef(
     new ProxyClient({ baseUrl: PROXY_BASE_URL })
@@ -148,7 +162,8 @@ export default function App() {
 
     try {
       let accumulatedText = "";
-      const toolCalls: ToolCall[] = [];
+      // Map to store tool calls by their ID for easy updates
+      const currentToolCalls = new Map<string, ToolCall>();
 
       // Send message with streaming callback
       await proxyClient.sendMessage(
@@ -157,38 +172,34 @@ export default function App() {
           session_id: sessionId,
           message: userMessage.content,
         },
-        (chunk: string) => {
+        (chunk: string, invocationId: string, type: 'text' | 'functionCall' | 'functionResponse', eventData: any) => {
           // Update the AI message with each chunk
-          accumulatedText += chunk;
           setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiMessageId
-                ? { ...msg, content: accumulatedText, isLoading: false }
-                : msg
-            )
+            prev.map((msg) => {
+              if (msg.id === aiMessageId) {
+                if (type === 'text') {
+                  accumulatedText += chunk;
+                  return { ...msg, content: accumulatedText, isLoading: false };
+                } else if (type === 'functionCall') {
+                  const { id, name, args } = eventData.functionCall;
+                  const newToolCall: ToolCall = { id, name, args, status: 'calling' };
+                  currentToolCalls.set(id, newToolCall);
+                  return { ...msg, toolCalls: Array.from(currentToolCalls.values()) };
+                } else if (type === 'functionResponse') {
+                  const { id, name, response } = eventData.functionResponse;
+                  const existingToolCall = currentToolCalls.get(id);
+                  if (existingToolCall) {
+                    existingToolCall.status = 'complete';
+                    existingToolCall.response = response;
+                    currentToolCalls.set(id, existingToolCall); // Update map
+                  }
+                  return { ...msg, toolCalls: Array.from(currentToolCalls.values()) };
+                }
+              }
+              return msg;
+            })
           );
         },
-        (toolName: string, status: 'calling' | 'complete', args?: any) => {
-          // Handle tool calls
-          const existingToolIndex = toolCalls.findIndex(t => t.name === toolName);
-
-          if (existingToolIndex >= 0) {
-            // Update existing tool call status
-            toolCalls[existingToolIndex] = { name: toolName, status, args };
-          } else {
-            // Add new tool call
-            toolCalls.push({ name: toolName, status, args });
-          }
-
-          // Update the message with tool calls
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiMessageId
-                ? { ...msg, toolCalls: [...toolCalls] }
-                : msg
-            )
-          );
-        }
       );
 
       setIsLoading(false);
@@ -217,25 +228,43 @@ export default function App() {
     }
   };
 
+  const handleToolCallPress = (toolCall: ToolCall) => {
+    navigation.navigate('ToolResponseDebug', { toolCall });
+  };
+
   const renderMessage = ({ item }: { item: Message }) => (
-    <MessageBubble message={item} />
+    <MessageBubble
+      message={item}
+      onToolCallPress={showResponseDebug ? handleToolCallPress : undefined}
+    />
   );
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-        <StatusBar style="dark" />
-        <View style={styles.contentWrapper}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.newChatButton}
-              onPress={handleNewChat}
-              disabled={!isConnected}
-            >
-              <Ionicons name="add" size={28} color="#111827" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>ADK Chat</Text>
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <StatusBar style="dark" />
+      <View style={styles.contentWrapper}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.newChatButton}
+            onPress={handleNewChat}
+            disabled={!isConnected}
+          >
+            <Ionicons name="add" size={28} color="#111827" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>ADK Chat</Text>
+          {/* Debug Toggle and Status Indicator */}
+          <View style={styles.statusAndDebugContainer}>
+            <View style={styles.debugToggleContainer}>
+              <Text style={styles.debugToggleText}>Debug</Text>
+              <Switch
+                trackColor={{ false: "#767577", true: "#81b0ff" }}
+                thumbColor={showResponseDebug ? "#f5dd4b" : "#f4f3f4"}
+                ios_backgroundColor="#3e3e3e"
+                onValueChange={setShowResponseDebug}
+                value={showResponseDebug}
+              />
+            </View>
             <View style={styles.statusIndicator}>
               <View
                 style={[
@@ -245,64 +274,78 @@ export default function App() {
               />
             </View>
           </View>
-
-          <KeyboardAvoidingView
-            style={styles.container}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-          >
-            <FlatList
-              ref={flatListRef}
-              data={messages}
-              renderItem={renderMessage}
-              keyExtractor={(item) => item.id}
-              style={styles.messagesList}
-              contentContainerStyle={styles.messagesContent}
-              showsVerticalScrollIndicator={false}
-              ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  <Ionicons
-                    name="chatbubbles-outline"
-                    size={64}
-                    color="#E5E7EB"
-                  />
-                  <Text style={styles.emptyStateText}>
-                    Start a conversation with your AI agent
-                  </Text>
-                  <Text style={styles.emptyStateSubtext}>
-                    {isConnected
-                      ? `Connected to: ${PROXY_BASE_URL}`
-                      : `Disconnected from: ${PROXY_BASE_URL}`}
-                  </Text>
-                  {!isConnected && (
-                    <TouchableOpacity
-                      style={styles.retryButton}
-                      onPress={checkConnection}
-                    >
-                      <Text style={styles.retryButtonText}>Retry Connection</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              }
-            />
-
-            <ChatInput
-              value={input}
-              onChangeText={setInput}
-              onSend={handleSend}
-              disabled={isLoading || !isConnected || !sessionId}
-              placeholder={
-                !isConnected
-                  ? "Connecting to server..."
-                  : !sessionId
-                  ? "Creating session..."
-                  : isLoading
-                  ? "AI is thinking..."
-                  : "How can I help you today?"
-              }
-            />
-          </KeyboardAvoidingView>
         </View>
-      </SafeAreaView>
+
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item) => item.id}
+            style={styles.messagesList}
+            contentContainerStyle={styles.messagesContent}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Ionicons
+                  name="chatbubbles-outline"
+                  size={64}
+                  color="#E5E7EB"
+                />
+                <Text style={styles.emptyStateText}>
+                  Start a conversation with your AI agent
+                </Text>
+                <Text style={styles.emptyStateSubtext}>
+                  {isConnected
+                    ? `Connected to: ${PROXY_BASE_URL}`
+                    : `Disconnected from: ${PROXY_BASE_URL}`}
+                </Text>
+                {!isConnected && (
+                  <TouchableOpacity
+                    style={styles.retryButton}
+                    onPress={checkConnection}
+                  >
+                    <Text style={styles.retryButtonText}>Retry Connection</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            }
+          />
+
+          <ChatInput
+            value={input}
+            onChangeText={setInput}
+            onSend={handleSend}
+            disabled={isLoading || !isConnected || !sessionId}
+            placeholder={
+              !isConnected
+                ? "Connecting to server..."
+                : !sessionId
+                ? "Creating session..."
+                : isLoading
+                ? "AI is thinking..."
+                : "How can I help you today?"
+            }
+          />
+        </KeyboardAvoidingView>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// Main App Component with Navigation Container
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Chat">
+          <Stack.Screen name="Chat" component={ChatScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="ToolResponseDebug" component={ToolResponseDebugScreen} options={{ title: 'Tool Response' }} />
+        </Stack.Navigator>
+      </NavigationContainer>
     </SafeAreaProvider>
   );
 }
@@ -346,9 +389,24 @@ const styles = StyleSheet.create({
     textAlign: "center",
     zIndex: -1,
   },
+  statusAndDebugContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  debugToggleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  debugToggleText: {
+    fontSize: 14,
+    color: "#6B7280",
+  },
   statusIndicator: {
-    width: 100,
+    width: 20, // Adjust width to accommodate the dot only
     alignItems: "flex-end",
+    // Remove unnecessary padding or margin if already handled by gap in parent
   },
   statusDot: {
     width: 8,
