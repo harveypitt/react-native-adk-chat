@@ -20,8 +20,9 @@ import {
 } from "../../packages/client/src";
 
 // Configuration - use environment variables or defaults
-const PROXY_BASE_URL = process.env.PROXY_BASE_URL || "http://localhost:3000";
-const DEFAULT_USER_ID = process.env.DEFAULT_USER_ID || "harvey_123";
+// Expo requires EXPO_PUBLIC_ prefix for client-side env vars
+const PROXY_BASE_URL = process.env.EXPO_PUBLIC_PROXY_BASE_URL || "http://localhost:3000";
+const DEFAULT_USER_ID = process.env.EXPO_PUBLIC_DEFAULT_USER_ID || "harvey_123";
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);

@@ -6,6 +6,7 @@
 
 export interface ProxyConfig {
   baseUrl: string; // e.g., "http://localhost:3000" or "https://your-proxy.vercel.app"
+  defaultAppName?: string; // Optional default app name (for Cloud Run deployments)
 }
 
 export interface CreateSessionResponse {
@@ -38,6 +39,7 @@ export interface ChatRequest {
   user_id: string;
   session_id?: string;
   message: string;
+  app_name?: string; // Optional app name (for Cloud Run deployments)
   run_config?: Record<string, any>;
 }
 
@@ -55,14 +57,48 @@ export class ProxyClient {
   }
 
   /**
+   * List available apps/agents (Cloud Run only)
+   * @returns Promise<string[]> - Array of available app names
+   */
+  async listApps(): Promise<string[]> {
+    try {
+      const response = await fetch(`${this.config.baseUrl}/apps`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({
+          error: response.statusText,
+        }));
+        throw new Error(
+          `Failed to list apps: ${error.error || response.statusText}`
+        );
+      }
+
+      const data = await response.json();
+      return data.apps || [];
+    } catch (error) {
+      console.error("List Apps Error:", error);
+      throw new Error(
+        error instanceof Error ? error.message : "Failed to list apps"
+      );
+    }
+  }
+
+  /**
    * Create a new session for a user
    * @param userId - The user ID
    * @param sessionId - Optional custom session ID (auto-generated if not provided)
+   * @param appName - Optional app name (for Cloud Run deployments)
    * @returns Promise<CreateSessionResponse>
    */
   async createSession(
     userId: string,
-    sessionId?: string
+    sessionId?: string,
+    appName?: string
   ): Promise<CreateSessionResponse> {
     try {
       const response = await fetch(`${this.config.baseUrl}/sessions/create`, {
@@ -73,6 +109,7 @@ export class ProxyClient {
         body: JSON.stringify({
           user_id: userId,
           ...(sessionId && { session_id: sessionId }),
+          ...(appName || this.config.defaultAppName) && { app_name: appName || this.config.defaultAppName },
         }),
       });
 
@@ -98,9 +135,10 @@ export class ProxyClient {
    * Get an existing session
    * @param userId - The user ID
    * @param sessionId - The session ID
+   * @param appName - Optional app name (for Cloud Run deployments)
    * @returns Promise<SessionData>
    */
-  async getSession(userId: string, sessionId: string): Promise<SessionData> {
+  async getSession(userId: string, sessionId: string, appName?: string): Promise<SessionData> {
     try {
       const response = await fetch(`${this.config.baseUrl}/sessions/get`, {
         method: "POST",
@@ -110,6 +148,7 @@ export class ProxyClient {
         body: JSON.stringify({
           user_id: userId,
           session_id: sessionId,
+          ...(appName || this.config.defaultAppName) && { app_name: appName || this.config.defaultAppName },
         }),
       });
 
@@ -172,8 +211,9 @@ export class ProxyClient {
    * Delete a session
    * @param userId - The user ID
    * @param sessionId - The session ID
+   * @param appName - Optional app name (for Cloud Run deployments)
    */
-  async deleteSession(userId: string, sessionId: string): Promise<void> {
+  async deleteSession(userId: string, sessionId: string, appName?: string): Promise<void> {
     try {
       const response = await fetch(`${this.config.baseUrl}/sessions/delete`, {
         method: "POST",
@@ -183,6 +223,7 @@ export class ProxyClient {
         body: JSON.stringify({
           user_id: userId,
           session_id: sessionId,
+          ...(appName || this.config.defaultAppName) && { app_name: appName || this.config.defaultAppName },
         }),
       });
 
@@ -215,12 +256,18 @@ export class ProxyClient {
     onToolCall?: (toolName: string, status: 'calling' | 'complete', args?: any) => void
   ): Promise<string> {
     try {
+      // Add default app_name if configured and not provided in request
+      const requestWithDefaults = {
+        ...request,
+        ...(this.config.defaultAppName && !request.app_name) && { app_name: this.config.defaultAppName },
+      };
+
       const response = await fetch(`${this.config.baseUrl}/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(request),
+        body: JSON.stringify(requestWithDefaults),
       });
 
       if (!response.ok) {

@@ -38,10 +38,11 @@ yarn-error.*
 server/.env
 server/service-account.json
 server/node_modules/
-packages/server/.env
-packages/server/service-account*.json
-packages/server/adk-proxy.json
-packages/server/**/google-*.json
+packages/server-agentengine/.env
+packages/server-agentengine/service-account*.json
+packages/server-agentengine/adk-proxy.json
+packages/server-agentengine/**/google-*.json
+packages/server-cloudrun/.env
 
 # typescript
 *.tsbuildinfo

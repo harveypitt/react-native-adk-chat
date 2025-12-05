@@ -1,5 +1,5 @@
 {
-  "name": "@react-native-adk-chat/server",
+  "name": "@react-native-adk-chat/server-agentengine",
   "version": "1.0.0",
   "description": "Proxy service for Google Agent Engine (ADK) with automatic OAuth token refresh",
   "main": "src/index.js",

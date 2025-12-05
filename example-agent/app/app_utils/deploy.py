@@ -90,10 +90,7 @@ def print_deployment_success(
     resource_name_parts = remote_agent.api_resource.name.split("/")
     agent_engine_id = resource_name_parts[-1]
     project_number = resource_name_parts[1]
-    console_url = f"https://console.cloud.google.com/vertex-ai/agents/locations/{location}/agent-engines/{agent_engine_id}?project={project}"
-    print(
-        "\n✅ Deployment successful! Test your agent: notebooks/adk_app_testing.ipynb"
-    )
+    print("\n✅ Deployment successful!")
     service_account = remote_agent.api_resource.spec.service_account
     if service_account:
         print(f"Service Account: {service_account}")
@@ -102,7 +99,8 @@ def print_deployment_success(
             f"service-{project_number}@gcp-sa-aiplatform-re.iam.gserviceaccount.com"
         )
         print(f"Service Account: {default_sa}")
-    print(f"\n📊 View in Console: {console_url}\n")
+    playground_url = f"https://console.cloud.google.com/vertex-ai/agents/locations/{location}/agent-engines/{agent_engine_id}/playground?project={project}"
+    print(f"\n📊 Open Console Playground: {playground_url}\n")
 
 
 @click.command()

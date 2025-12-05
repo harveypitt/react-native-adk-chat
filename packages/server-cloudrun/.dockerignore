@@ -1,0 +1,45 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Environment files (should be set via Cloud Run env vars)
+.env
+.env.*
+*.env
+
+# Service account keys (should be mounted or use Cloud Run service account)
+service-account.json
+
+# Development files
+nodemon.json
+.vscode
+.idea
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Logs
+logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+test
+tests
+*.test.js
+*.spec.js
+
+# Temporary files
+tmp
+temp
+*.tmp

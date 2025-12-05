@@ -4,6 +4,8 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
+    "start:agentengine": "EXPO_PUBLIC_PROXY_BASE_URL=http://localhost:3000 expo start",
+    "start:cloudrun": "EXPO_PUBLIC_PROXY_BASE_URL=http://localhost:3001 expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"

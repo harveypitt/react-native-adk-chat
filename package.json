@@ -9,10 +9,14 @@
   ],
   "scripts": {
     "client": "npm run dev --workspace=packages/client",
-    "server": "npm run dev --workspace=packages/server",
-    "server:start": "npm start --workspace=packages/server",
+    "server:agentengine": "npm run dev --workspace=packages/server-agentengine",
+    "server:agentengine:start": "npm start --workspace=packages/server-agentengine",
+    "server:cloudrun": "npm run dev --workspace=packages/server-cloudrun",
+    "server:cloudrun:start": "npm start --workspace=packages/server-cloudrun",
     "demo": "npm start --workspace=example/demo-app",
-    "install:all": "npm install && npm install --workspace=packages/server",
+    "demo:agentengine": "npm run start:agentengine --workspace=example/demo-app",
+    "demo:cloudrun": "npm run start:cloudrun --workspace=example/demo-app",
+    "install:all": "npm install && npm install --workspace=packages/server-agentengine && npm install --workspace=packages/server-cloudrun",
     "clean": "rm -rf node_modules packages/*/node_modules example/*/node_modules"
   },
   "keywords": [
