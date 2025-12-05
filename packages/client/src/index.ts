@@ -5,6 +5,8 @@ export type { ChatInputProps } from "./components/ChatInput";
 export { default as MessageBubble } from "./components/MessageBubble";
 export type { Message, MessageBubbleProps, ToolCall } from "./components/MessageBubble";
 
+export { default as ToolResponseDebugScreen } from "./components/ToolResponseDebugScreen";
+
 // API Clients
 export { ADKClient } from "./api/adkClient";
 export { ProxyClient } from "./api/proxyClient";

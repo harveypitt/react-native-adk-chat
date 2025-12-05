@@ -240,13 +240,6 @@ export class ProxyClient {
   /**
    * Send a chat message with streaming support
    * @param request - Chat request parameters
-   * @param onChunk - Callback function for each streamed chunk
-   * @param onToolCall - Callback function for tool calls
-   * @returns Promise<string> - The complete response text
-   */
-  /**
-   * Send a chat message with streaming support
-   * @param request - Chat request parameters
    * @param onEvent - Callback function for each streamed event (text, functionCall, functionResponse)
    * @returns Promise<string> - The complete response text
    */
@@ -296,20 +289,23 @@ export class ProxyClient {
         // Decode the chunk and add to buffer
         buffer += decoder.decode(value, { stream: true });
 
-        // Try to parse complete JSON objects
-        // The server sends newline-delimited JSON (data: {...}\n\n)
-        const lines = buffer.split("data: ");
-        buffer = lines.pop() || ""; // Keep incomplete line in buffer
+        // Parse SSE events: data: {...}\n\n
+        const messages = buffer.split('\n\n');
+        // Keep the last partial message in the buffer
+        buffer = messages.pop() || '';
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
+        for (const message of messages) {
+          const trimmed = message.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+          const jsonStr = trimmed.slice(6).trim();
+          if (!jsonStr) continue;
 
           let data;
           try {
-            data = JSON.parse(trimmed);
+            data = JSON.parse(jsonStr);
           } catch (parseError) {
-            console.warn("Failed to parse streaming chunk:", trimmed, parseError);
+            console.warn("Failed to parse streaming chunk:", jsonStr, parseError);
             continue;
           }
 
@@ -364,54 +360,57 @@ export class ProxyClient {
 
       // Final processing for any remaining buffer (should mostly be empty for SSE)
       if (buffer.trim()) {
-        let data;
-        try {
-          data = JSON.parse(buffer);
-          const invocationId = data.invocationId || 'default';
-          let eventType: 'text' | 'functionCall' | 'functionResponse' | 'other' = 'other';
-          let eventData: any = data;
-          let textChunk = "";
+        if (buffer.startsWith('data: ')) {
+          const jsonStr = buffer.slice(6).trim();
+          try {
+            const data = JSON.parse(jsonStr);
+            const invocationId = data.invocationId || 'default';
+            let eventType: 'text' | 'functionCall' | 'functionResponse' | 'other' = 'other';
+            let eventData: any = data;
+            let textChunk = "";
 
-          if (data.content && Array.isArray(data.content.parts)) {
-            for (const part of data.content.parts) {
-              if (part.text) {
-                textChunk += part.text;
-                eventType = 'text';
+            if (data.content && Array.isArray(data.content.parts)) {
+              for (const part of data.content.parts) {
+                if (part.text) {
+                  textChunk += part.text;
+                  eventType = 'text';
+                }
+                if (part.functionCall) {
+                  eventType = 'functionCall';
+                  eventData = part;
+                  break;
+                }
+                if (part.functionResponse) {
+                  eventType = 'functionResponse';
+                  eventData = part;
+                  break;
+                }
               }
-              if (part.functionCall) {
+            }
+            if (data.toolCalls && data.toolCalls.length > 0) {
+              const toolCall = data.toolCalls[0];
+              if (toolCall.status === 'calling') {
                 eventType = 'functionCall';
-                eventData = part;
-                break;
-              }
-              if (part.functionResponse) {
+                eventData = { functionCall: toolCall };
+              } else if (toolCall.status === 'complete') {
                 eventType = 'functionResponse';
-                eventData = part;
-                break;
+                eventData = { functionResponse: toolCall };
               }
             }
-          }
-          if (data.toolCalls && data.toolCalls.length > 0) {
-            const toolCall = data.toolCalls[0];
-            if (toolCall.status === 'calling') {
-              eventType = 'functionCall';
-              eventData = { functionCall: toolCall };
-            } else if (toolCall.status === 'complete') {
-              eventType = 'functionResponse';
-              eventData = { functionResponse: toolCall };
+
+            if (onEvent) {
+              onEvent(textChunk, invocationId, eventType, eventData);
             }
-          }
+            if (textChunk) {
+              fullText += textChunk;
+            }
 
-          if (onEvent) {
-            onEvent(textChunk, invocationId, eventType, eventData);
+          } catch (parseError) {
+            console.warn("Failed to parse remaining buffer:", buffer, parseError);
           }
-          if (textChunk) {
-            fullText += textChunk;
-          }
-
-        } catch (parseError) {
-          console.warn("Failed to parse remaining buffer:", buffer, parseError);
         }
       }
+
 
       return fullText;
     } catch (error) {

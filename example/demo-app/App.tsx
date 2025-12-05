@@ -7,7 +7,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Text,
-  Switch, // Import Switch for the toggle
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -18,10 +17,10 @@ import {
   ProxyClient,
   type Message,
   type ToolCall,
+  ToolResponseDebugScreen,
 } from "../../packages/client/src";
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import ToolResponseDebugScreen from '../../packages/client/src/screens/ToolResponseDebugScreen'; // Import the new screen
 
 // Configuration - use environment variables or defaults
 // Expo requires EXPO_PUBLIC_ prefix for client-side env vars
@@ -36,6 +35,20 @@ type RootStackParamList = {
 
 const Stack = createStackNavigator<RootStackParamList>();
 
+const KeyboardWrapper = ({ children, style }: { children: React.ReactNode; style: any }) => {
+  if (Platform.OS === "web") {
+    return <View style={style}>{children}</View>;
+  }
+  return (
+    <KeyboardAvoidingView
+      style={style}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      {children}
+    </KeyboardAvoidingView>
+  );
+};
+
 // Main Chat Screen Component
 function ChatScreen({ navigation }: { navigation: any }) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -43,7 +56,6 @@ function ChatScreen({ navigation }: { navigation: any }) {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>("");
   const [isConnected, setIsConnected] = useState(false);
-  const [showResponseDebug, setShowResponseDebug] = useState(false); // New state for debug toggle
   const flatListRef = useRef<FlatList>(null);
   const proxyClient = useRef(
     new ProxyClient({ baseUrl: PROXY_BASE_URL })
@@ -156,6 +168,7 @@ function ChatScreen({ navigation }: { navigation: any }) {
       content: "",
       timestamp: new Date(),
       isLoading: true,
+      toolCalls: [],
     };
 
     setMessages((prev) => [...prev, aiMessage]);
@@ -173,6 +186,13 @@ function ChatScreen({ navigation }: { navigation: any }) {
           message: userMessage.content,
         },
         (chunk: string, invocationId: string, type: 'text' | 'functionCall' | 'functionResponse', eventData: any) => {
+          // Debug logging
+          if (type === 'functionCall') {
+            console.log('App: Received functionCall:', eventData.functionCall.name);
+          } else if (type === 'functionResponse') {
+            console.log('App: Received functionResponse for:', eventData.functionResponse.name);
+          }
+
           // Update the AI message with each chunk
           setMessages((prev) =>
             prev.map((msg) => {
@@ -184,7 +204,9 @@ function ChatScreen({ navigation }: { navigation: any }) {
                   const { id, name, args } = eventData.functionCall;
                   const newToolCall: ToolCall = { id, name, args, status: 'calling' };
                   currentToolCalls.set(id, newToolCall);
-                  return { ...msg, toolCalls: Array.from(currentToolCalls.values()) };
+                  const updatedToolCalls = Array.from(currentToolCalls.values());
+                  console.log('App: Updating message with tool calls (call):', updatedToolCalls);
+                  return { ...msg, toolCalls: updatedToolCalls };
                 } else if (type === 'functionResponse') {
                   const { id, name, response } = eventData.functionResponse;
                   const existingToolCall = currentToolCalls.get(id);
@@ -193,13 +215,15 @@ function ChatScreen({ navigation }: { navigation: any }) {
                     existingToolCall.response = response;
                     currentToolCalls.set(id, existingToolCall); // Update map
                   }
-                  return { ...msg, toolCalls: Array.from(currentToolCalls.values()) };
+                  const updatedToolCalls = Array.from(currentToolCalls.values());
+                  console.log('App: Updating message with tool calls (response):', updatedToolCalls);
+                  return { ...msg, toolCalls: updatedToolCalls };
                 }
               }
               return msg;
             })
           );
-        },
+        }
       );
 
       setIsLoading(false);
@@ -235,7 +259,7 @@ function ChatScreen({ navigation }: { navigation: any }) {
   const renderMessage = ({ item }: { item: Message }) => (
     <MessageBubble
       message={item}
-      onToolCallPress={showResponseDebug ? handleToolCallPress : undefined}
+      onToolCallPress={handleToolCallPress}
     />
   );
 
@@ -253,33 +277,17 @@ function ChatScreen({ navigation }: { navigation: any }) {
             <Ionicons name="add" size={28} color="#111827" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>ADK Chat</Text>
-          {/* Debug Toggle and Status Indicator */}
-          <View style={styles.statusAndDebugContainer}>
-            <View style={styles.debugToggleContainer}>
-              <Text style={styles.debugToggleText}>Debug</Text>
-              <Switch
-                trackColor={{ false: "#767577", true: "#81b0ff" }}
-                thumbColor={showResponseDebug ? "#f5dd4b" : "#f4f3f4"}
-                ios_backgroundColor="#3e3e3e"
-                onValueChange={setShowResponseDebug}
-                value={showResponseDebug}
-              />
-            </View>
-            <View style={styles.statusIndicator}>
-              <View
-                style={[
-                  styles.statusDot,
-                  isConnected ? styles.statusConnected : styles.statusDisconnected,
-                ]}
-              />
-            </View>
+          <View style={styles.statusIndicator}>
+            <View
+              style={[
+                styles.statusDot,
+                isConnected ? styles.statusConnected : styles.statusDisconnected,
+              ]}
+            />
           </View>
         </View>
 
-        <KeyboardAvoidingView
-          style={styles.container}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
+        <KeyboardWrapper style={styles.keyboardView}>
           <FlatList
             ref={flatListRef}
             data={messages}
@@ -330,7 +338,7 @@ function ChatScreen({ navigation }: { navigation: any }) {
                 : "How can I help you today?"
             }
           />
-        </KeyboardAvoidingView>
+        </KeyboardWrapper>
       </View>
     </SafeAreaView>
   );
@@ -339,9 +347,14 @@ function ChatScreen({ navigation }: { navigation: any }) {
 // Main App Component with Navigation Container
 export default function App() {
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={styles.container}>
       <NavigationContainer>
-        <Stack.Navigator initialRouteName="Chat">
+        <Stack.Navigator
+          initialRouteName="Chat"
+          screenOptions={{
+            cardStyle: { flex: 1 }
+          }}
+        >
           <Stack.Screen name="Chat" component={ChatScreen} options={{ headerShown: false }} />
           <Stack.Screen name="ToolResponseDebug" component={ToolResponseDebugScreen} options={{ title: 'Tool Response' }} />
         </Stack.Navigator>
@@ -354,6 +367,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
+    ...(Platform.OS === "web" ? { height: "100vh", overflow: "hidden" } : {}),
   },
   contentWrapper: {
     flex: 1,
@@ -370,6 +384,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
     backgroundColor: "#FFFFFF",
+    zIndex: 10,
   },
   newChatButton: {
     width: 40,
@@ -389,24 +404,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
     zIndex: -1,
   },
-  statusAndDebugContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  debugToggleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  debugToggleText: {
-    fontSize: 14,
-    color: "#6B7280",
-  },
   statusIndicator: {
-    width: 20, // Adjust width to accommodate the dot only
+    width: 40,
     alignItems: "flex-end",
-    // Remove unnecessary padding or margin if already handled by gap in parent
   },
   statusDot: {
     width: 8,
@@ -418,6 +418,9 @@ const styles = StyleSheet.create({
   },
   statusDisconnected: {
     backgroundColor: "#EF4444",
+  },
+  keyboardView: {
+    flex: 1,
   },
   messagesList: {
     flex: 1,
