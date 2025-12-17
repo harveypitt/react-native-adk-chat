@@ -1,0 +1,24 @@
+{
+  "name": "create-adk-chat-app",
+  "version": "1.0.0",
+  "description": "CLI tool to create ADK chat apps",
+  "bin": {
+    "create-adk-chat-app": "./bin/cli.js"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "commander": "^11.0.0",
+    "chalk": "^4.1.2",
+    "ora": "^5.4.1",
+    "fs-extra": "^11.0.0",
+    "prompts": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/fs-extra": "^11.0.0",
+    "@types/prompts": "^2.4.0",
+    "typescript": "^5.0.0"
+  }
+}

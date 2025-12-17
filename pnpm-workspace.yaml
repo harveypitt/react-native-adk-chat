@@ -1,3 +1,5 @@
 packages:
-  - 'packages/*'
-  - 'example/demo-app'
+  - "packages/*"
+  - "packages/create-adk-chat-app"
+  - "example"
+  - "example-agent"
