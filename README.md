@@ -17,9 +17,14 @@ This package provides pre-built React Native components and API clients to quick
 - ✅ **TypeScript** - Full type safety
 - ✅ **Cross-platform** - iOS, Android, and web
 
-**Perfect for:** Developers who have deployed an ADK agent to Google Cloud Agent Engine and want to build a mobile chat interface.
+**Perfect for:** Developers who have deployed an ADK agent to **Google Cloud Run** or **Agent Engine** and want to build a mobile chat interface.
 
 ## Architecture
+
+This package supports two deployment models. Choose the one that matches your agent backend.
+
+### 1. Cloud Run (Recommended)
+For agents deployed as a standard Cloud Run service (REST API).
 
 ```
 ┌─────────────────┐
@@ -29,18 +34,39 @@ This package provides pre-built React Native components and API clients to quick
          │ HTTP/HTTPS
          │
 ┌────────▼────────┐
-│  Proxy Server   │  ← Handles Google Cloud authentication
-│  (Node.js)      │     Auto-refreshes OAuth tokens
+│  Proxy Server   │  ← packages/server-cloudrun
+│  (Node.js)      │     Handles CORS & Auth headers
 └────────┬────────┘
          │ Authenticated requests
          │
 ┌────────▼────────┐
-│  Agent Engine   │  ← Your deployed ADK agent
-│  (Google Cloud) │     
+│   Cloud Run     │  ← Your Agent Service
+│    Service      │     Exposes standard ADK endpoints
 └─────────────────┘
 ```
 
-**Why the proxy?** Mobile apps can't securely store Google Cloud credentials. The proxy server handles authentication server-side and forwards requests to Agent Engine.
+### 2. Agent Engine
+For agents deployed directly to Vertex AI Agent Engine.
+
+```
+┌─────────────────┐
+│  Mobile App     │
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  Proxy Server   │  ← packages/server-agentengine
+│  (Node.js)      │     Handles Service Account Auth
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  Agent Engine   │  ← Vertex AI Resource
+│ (Google Cloud)  │
+└─────────────────┘
+```
+
+**Why the proxy?**
+1.  **Security**: Mobile apps cannot safely store Google Cloud Service Account keys.
+2.  **CORS**: Essential for Web development, as browsers block direct requests to Cloud Run/Agent Engine.
 
 ## Prerequisites
 
@@ -74,94 +100,50 @@ Before starting, you need:
 
 ## Quick Start
 
-### Step 1: Clone the Repository
+### Step 1: Create a New App
+
+The fastest way to get started is using our CLI tool. It creates a full React Native app with the proxy server bundled inside:
 
 ```bash
-git clone https://github.com/your-username/react-native-adk-chat.git
-cd react-native-adk-chat
-npm install  # or pnpm install
+npx create-adk-chat-app my-chat-app
 ```
 
-### Step 2: Configure and Start Proxy Server
+The CLI will ask for:
+1.  **Project Name**: Directory for your new app.
+2.  **Proxy Type**: Choose **Cloud Run Proxy** (Recommended).
+3.  **Connection**: Select **Local Proxy (localhost:3000)** for best compatibility (especially for Web).
+4.  **Cloud Run URL**: Your remote agent URL (e.g., `https://mbs-v2...run.app`).
+
+### Step 2: Start the App
+
+Navigate to your new app:
 
 ```bash
-cd packages/server
-
-# Create environment file
-cp .env.example .env
-```
-
-Edit `packages/server/.env`:
-
-```env
-# Your Agent Engine endpoint
-AGENT_ENGINE_URL=https://your-project-us-central1-agent-engine.a.run.app
-
-# Your app name from ADK configuration
-APP_NAME=your-app-name
-
-# Path to service account key (use absolute path)
-GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/service-account-key.json
-
-# Server port
-PORT=3000
-```
-
-Start the proxy:
-
-```bash
-npm install
+cd my-chat-app
+npm install  # Installs app AND proxy dependencies
 npm start
-
-# You should see:
-# 🚀 Proxy server running on http://localhost:3000
-# ✅ Agent Engine URL: https://...
 ```
 
-**Keep this terminal running!**
+This command launches both the **App** (Expo) and the **Proxy Server** concurrently. You will see logs for both in the terminal:
+- `[PROXY]` logs show communication with your Cloud Run agent.
+- `[APP]` logs show Metro bundler output.
 
-### Step 3: Test Proxy Connection
+Press `w` for Web, `i` for iOS Simulator, or `a` for Android Emulator.
 
-In a new terminal:
+### Step 3: Test the Chat
+
+1.  The app connects to `http://localhost:3000`.
+2.  The bundled proxy forwards requests to your Cloud Run URL.
+3.  Send a message like "Hello!" to verify the flow.
+
+### Configuring an Existing App
+
+If you need to change your Cloud Run URL or switch connection modes later:
 
 ```bash
-# Health check
-curl http://localhost:3000/health
-# Expected: {"status":"ok","agentEngineUrl":"https://..."}
-
-# Create session
-curl -X POST http://localhost:3000/api/sessions \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "test_user"}'
-# Expected: {"output":{"id":"s_1234567890_abc"},"status":"ok"}
+# Inside your app directory
+npx create-adk-chat-app --update
 ```
-
-If both tests pass, your proxy is working! ✅
-
-### Step 4: Run Demo App
-
-```bash
-# From project root
-cd example/demo-app
-
-# Edit App.tsx to update proxy URL if needed
-# For physical devices, use your computer's IP instead of localhost:
-# const PROXY_BASE_URL = "http://192.168.1.100:3000";
-
-npm install
-npm start
-
-# Press 'i' for iOS, 'a' for Android, or scan QR code
-```
-
-### Step 5: Test the Chat
-
-1. Look for green dot (connected status)
-2. Send message: "Hello!"
-3. Watch AI response stream in
-4. Try "New Chat" button for new session
-
-**Success!** You now have a working AI chat app connected to your Agent Engine deployment.
 
 ## Using in Your Own React Native App
 
@@ -542,6 +524,26 @@ eas submit --platform android
 
 ### Proxy Server Environment Variables
 
+#### Cloud Run Proxy (`server-cloudrun`)
+For agents deployed as Cloud Run services.
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `CLOUD_RUN_URL` | Full URL of your Cloud Run service | Yes |
+| `DEFAULT_APP_NAME` | Default App Name to target (e.g., `MBS`) | Yes |
+| `PORT` | Server port | No (Default: 3000) |
+
+#### Agent Engine Proxy (`server-agentengine`)
+For agents deployed to Vertex AI Agent Engine.
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `AGENT_ENGINE_URL` | URL of your Agent Engine | Yes |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account key | Yes |
+| `PORT` | Server port | No (Default: 3000) |
+
+### Legacy Environment Variables
+
 Create `packages/server/.env`:
 
 ```env
@@ -556,6 +558,16 @@ DEBUG=true
 ```
 
 ### Mobile App Configuration
+
+When using the CLI-generated app, these are set in your `.env` file:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PROXY_BASE_URL` | URL of the proxy or backend | `http://localhost:3000` |
+| `PROXY_API_MODE` | `proxy` (Standard) or `direct` (Cloud Run Direct) | `proxy` |
+| `PROXY_DEFAULT_APP_NAME` | App Name (Required for `direct` mode) | - |
+
+### Code Configuration
 
 Edit `example/demo-app/App.tsx` or your app:
 
