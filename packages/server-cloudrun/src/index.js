@@ -354,6 +354,25 @@ app.post('/chat', async (req, res) => {
           try {
             data = JSON.parse(jsonStr);
           } catch (parseError) {
+            // Check for unparseable error responses (e.g. 429s or other upstream errors)
+            if (jsonStr.includes('429 Too Many Requests') || (jsonStr.includes('"error"') && !jsonStr.includes('"error": null') && !jsonStr.includes('"error":null'))) {
+              console.warn('Detected upstream error in invalid JSON:', jsonStr);
+
+              let errorText = "Error from AI Agent: An error occurred.";
+              if (jsonStr.includes('429 Too Many Requests')) {
+                errorText = "Error from AI Agent: Too Many Requests (429). Please try again later.";
+              }
+
+              const errorEvent = {
+                invocationId: 'system-error',
+                content: {
+                  parts: [{ text: errorText }]
+                }
+              };
+              res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+              return;
+            }
+
             // JSON might be split across chunks, skip for now
             if (DEBUG) console.warn('Skipping incomplete JSON:', jsonStr.substring(0, 50) + '...');
             continue;
