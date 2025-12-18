@@ -23,9 +23,17 @@ This happens because browsers block requests to domains that don't explicitly al
 ### Solutions:
 
 1.  **Use a Local Proxy (Recommended for Web Dev)**:
-    - Run the provided local proxy server (if available) or `server-cloudrun` from the ADK repository.
-    - Update your app to point to `http://localhost:3000` instead of the remote URL.
-    - Run `npx create-adk-chat-app --update` to switch to "Local Proxy" mode.
+    - This app includes a bundled proxy server in the `server/` directory.
+    - Start it with:
+      ```bash
+      # Configure with your remote Cloud Run URL
+      CLOUD_RUN_URL=https://your-app.run.app DEFAULT_APP_NAME=MBS npm run proxy
+      ```
+    - Update your app to point to `http://localhost:3000`:
+      ```bash
+      npx create-adk-chat-app --update
+      ```
+      (Select "Local Proxy")
 
 2.  **Use a CORS Extension**:
     - For development only, you can use a browser extension that disables CORS restrictions (e.g., "Allow CORS: Access-Control-Allow-Origin").

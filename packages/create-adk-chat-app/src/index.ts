@@ -46,6 +46,16 @@ program
     // Prompt for proxy configuration
     const configResponse = await prompts([
       {
+        type: 'select',
+        name: 'backendType',
+        message: 'Which proxy server type do you need?',
+        choices: [
+          { title: 'Cloud Run Proxy (Recommended)', value: 'cloud-run' },
+          { title: 'Agent Engine Proxy', value: 'agent-engine' },
+        ],
+        initial: 0,
+      },
+      {
         type: options.proxyUrl ? null : 'select',
         name: 'connectionType',
         message: 'How do you want to connect?',
@@ -94,6 +104,7 @@ program
 
     const apiMode = configResponse.isDirect ? 'direct' : 'proxy';
     const defaultAppName = configResponse.agentAppName || '';
+    const backendType = configResponse.backendType || 'cloud-run';
 
     // For update, use cwd if appName not provided
     const targetDir = appName
@@ -102,7 +113,8 @@ program
 
     try {
       if (isUpdate) {
-        await updateAppConfig(targetDir, proxyUrl, apiMode, defaultAppName);
+        // @ts-ignore
+        await updateAppConfig(targetDir, proxyUrl, apiMode, defaultAppName, backendType);
         console.log(chalk.green(`\n✅ Successfully updated configuration!\n`));
       } else {
         if (!appName) throw new Error('App name required for creation'); // Should be caught above
@@ -116,6 +128,8 @@ program
           apiMode,
           // @ts-ignore
           defaultAppName,
+          // @ts-ignore
+          backendType,
         });
 
         console.log(chalk.green(`\n✅ Successfully created ${appName}!\n`));

@@ -10,10 +10,19 @@ interface GenerateOptions {
   proxyUrl: string;
   apiMode?: 'proxy' | 'direct';
   defaultAppName?: string;
+  backendType?: 'cloud-run' | 'agent-engine';
 }
 
 export async function generateApp(options: GenerateOptions) {
-  const { appName, targetDir, template, proxyUrl, apiMode, defaultAppName } = options;
+  const {
+    appName,
+    targetDir,
+    template,
+    proxyUrl,
+    apiMode,
+    defaultAppName,
+    backendType,
+  } = options;
   const spinner = ora('Creating app structure...').start();
 
   try {
@@ -46,6 +55,27 @@ export async function generateApp(options: GenerateOptions) {
       });
     }
 
+    // Check for local server package based on backendType
+    const serverPackageName =
+      backendType === 'agent-engine' ? 'server-agentengine' : 'server-cloudrun';
+    const localServerPath = path.resolve(__dirname, '../../', serverPackageName);
+    const hasLocalServer = await fs.pathExists(
+      path.join(localServerPath, 'package.json')
+    );
+
+    if (hasLocalServer) {
+      spinner.text = `Vendoring local ${serverPackageName}...`;
+      const serverDir = path.join(targetDir, 'server');
+      await fs.ensureDir(serverDir);
+
+      await fs.copy(localServerPath, serverDir, {
+        filter: (src) => {
+          const basename = path.basename(src);
+          return basename !== 'node_modules' && basename !== '.git';
+        },
+      });
+    }
+
     spinner.text = 'Configuring package.json...';
 
     // Update package.json with app name
@@ -55,6 +85,11 @@ export async function generateApp(options: GenerateOptions) {
 
     if (hasLocalClient) {
       packageJson.dependencies['@react-native-adk-chat/client'] = 'file:./modules/client';
+    }
+
+    if (hasLocalServer) {
+      packageJson.scripts['proxy'] = 'cd server && npm start';
+      packageJson.scripts['postinstall'] = 'cd server && npm install';
     }
 
     await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
@@ -89,7 +124,8 @@ export async function updateAppConfig(
   targetDir: string,
   proxyUrl: string,
   apiMode?: 'proxy' | 'direct',
-  defaultAppName?: string
+  defaultAppName?: string,
+  backendType?: 'cloud-run' | 'agent-engine'
 ) {
   const spinner = ora('Updating configuration...').start();
 
@@ -184,6 +220,61 @@ export const PROXY_DEFAULT_APP_NAME = ENV_PROXY_DEFAULT_APP_NAME;
     })`
         );
         await fs.writeFile(chatScreenPath, content);
+      }
+    }
+
+    // Update bundled server if backendType is provided
+    if (backendType) {
+      const serverPackageName =
+        backendType === 'agent-engine'
+          ? 'server-agentengine'
+          : 'server-cloudrun';
+      const localServerPath = path.resolve(
+        __dirname,
+        '../../',
+        serverPackageName
+      );
+      const hasLocalServer = await fs.pathExists(
+        path.join(localServerPath, 'package.json')
+      );
+
+      if (hasLocalServer) {
+        spinner.text = `Updating bundled server (${serverPackageName})...`;
+        const serverDir = path.join(targetDir, 'server');
+        await fs.emptyDir(serverDir);
+
+        await fs.copy(localServerPath, serverDir, {
+          filter: (src) => {
+            const basename = path.basename(src);
+            return basename !== 'node_modules' && basename !== '.git';
+          },
+        });
+
+        // Update package.json scripts
+        const packageJsonPath = path.join(targetDir, 'package.json');
+        if (await fs.pathExists(packageJsonPath)) {
+          const packageJson = await fs.readJson(packageJsonPath);
+          packageJson.scripts = packageJson.scripts || {};
+          packageJson.scripts['proxy'] = 'cd server && npm start';
+          packageJson.scripts['postinstall'] = 'cd server && npm install';
+
+          // Update start scripts to use concurrently
+          const concurrently =
+            'concurrently --kill-others --names "PROXY,APP" --prefix-colors "bgBlue.bold,bgMagenta.bold" "npm run proxy"';
+
+          packageJson.scripts['start'] = `${concurrently} "expo start"`;
+          packageJson.scripts['android'] = `${concurrently} "expo start --android"`;
+          packageJson.scripts['ios'] = `${concurrently} "expo start --ios"`;
+          packageJson.scripts['web'] = `${concurrently} "expo start --web"`;
+
+          // Add concurrently to devDependencies
+          packageJson.devDependencies = packageJson.devDependencies || {};
+          if (!packageJson.devDependencies['concurrently']) {
+            packageJson.devDependencies['concurrently'] = '^8.2.2';
+          }
+
+          await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
+        }
       }
     }
 
