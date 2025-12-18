@@ -3,11 +3,41 @@ export interface ADKConfig {
   appName: string;
 }
 
+export interface ButtonOption {
+  id: string;
+  label: string;
+  value: string;
+}
+
+export interface MessagePart {
+  type: 'text' | 'buttons' | 'image' | 'citation';
+  content?: string;
+  buttons?: ButtonOption[];
+  imageUrl?: string;
+  citation?: {
+    document: string;
+    page?: number;
+    url?: string;
+  };
+}
+
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
 export interface Message {
   id: string;
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   content: string;
+  parts?: MessagePart[];
   timestamp: Date;
+  isLoading?: boolean;
+  toolCalls?: ToolCall[];
 }
 
 // ADK API Request Types

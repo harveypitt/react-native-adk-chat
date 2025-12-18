@@ -8,10 +8,12 @@ interface GenerateOptions {
   targetDir: string;
   template: string;
   proxyUrl: string;
+  apiMode?: 'proxy' | 'direct';
+  defaultAppName?: string;
 }
 
 export async function generateApp(options: GenerateOptions) {
-  const { appName, targetDir, template, proxyUrl } = options;
+  const { appName, targetDir, template, proxyUrl, apiMode, defaultAppName } = options;
   const spinner = ora('Creating app structure...').start();
 
   try {
@@ -27,12 +29,34 @@ export async function generateApp(options: GenerateOptions) {
     const templateDir = path.join(__dirname, '../templates', template);
     await fs.copy(templateDir, targetDir);
 
+    // Check for local client package (monorepo development)
+    const localClientPath = path.resolve(__dirname, '../../client');
+    const hasLocalClient = await fs.pathExists(path.join(localClientPath, 'package.json'));
+
+    if (hasLocalClient) {
+      spinner.text = 'Vendoring local client package...';
+      const vendorDir = path.join(targetDir, 'modules/client');
+      await fs.ensureDir(vendorDir);
+
+      await fs.copy(localClientPath, vendorDir, {
+        filter: (src) => {
+          const basename = path.basename(src);
+          return basename !== 'node_modules' && basename !== 'dist' && basename !== '.git';
+        },
+      });
+    }
+
     spinner.text = 'Configuring package.json...';
 
     // Update package.json with app name
     const packageJsonPath = path.join(targetDir, 'package.json');
     const packageJson = await fs.readJson(packageJsonPath);
     packageJson.name = appName;
+
+    if (hasLocalClient) {
+      packageJson.dependencies['@react-native-adk-chat/client'] = 'file:./modules/client';
+    }
+
     await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
 
     spinner.text = 'Configuring app.json...';
@@ -48,7 +72,11 @@ export async function generateApp(options: GenerateOptions) {
 
     // Create .env file with proxy URL
     const envPath = path.join(targetDir, '.env');
-    await fs.writeFile(envPath, `PROXY_BASE_URL=${proxyUrl}\n`);
+    let envContent = `PROXY_BASE_URL=${proxyUrl}\n`;
+    if (apiMode) envContent += `PROXY_API_MODE=${apiMode}\n`;
+    if (defaultAppName) envContent += `PROXY_DEFAULT_APP_NAME=${defaultAppName}\n`;
+
+    await fs.writeFile(envPath, envContent);
 
     spinner.succeed(chalk.green('App created successfully!'));
   } catch (error) {
@@ -57,7 +85,12 @@ export async function generateApp(options: GenerateOptions) {
   }
 }
 
-export async function updateAppConfig(targetDir: string, proxyUrl: string) {
+export async function updateAppConfig(
+  targetDir: string,
+  proxyUrl: string,
+  apiMode?: 'proxy' | 'direct',
+  defaultAppName?: string
+) {
   const spinner = ora('Updating configuration...').start();
 
   try {
@@ -68,18 +101,95 @@ export async function updateAppConfig(targetDir: string, proxyUrl: string) {
       envContent = await fs.readFile(envPath, 'utf8');
     }
 
-    const regex = /^PROXY_BASE_URL=.*$/m;
-    const newConfig = `PROXY_BASE_URL=${proxyUrl}`;
+    let newContent = envContent;
 
-    let newContent;
-    if (regex.test(envContent)) {
-      newContent = envContent.replace(regex, newConfig);
-    } else {
-      newContent = envContent + (envContent && !envContent.endsWith('\n') ? '\n' : '') + newConfig + '\n';
+    const updateOrAdd = (key: string, value: string) => {
+      const regex = new RegExp(`^${key}=.*$`, 'm');
+      const newLine = `${key}=${value}`;
+      if (regex.test(newContent)) {
+        newContent = newContent.replace(regex, newLine);
+      } else {
+        newContent =
+          newContent +
+          (newContent && !newContent.endsWith('\n') ? '\n' : '') +
+          newLine +
+          '\n';
+      }
+    };
+
+    updateOrAdd('PROXY_BASE_URL', proxyUrl);
+
+    if (apiMode) {
+      updateOrAdd('PROXY_API_MODE', apiMode);
+    }
+
+    if (defaultAppName) {
+      updateOrAdd('PROXY_DEFAULT_APP_NAME', defaultAppName);
     }
 
     await fs.writeFile(envPath, newContent);
-    spinner.succeed(chalk.green(`Updated configuration: PROXY_BASE_URL=${proxyUrl}`));
+
+    // Update src/config/constants.ts
+    const constantsPath = path.join(targetDir, 'src/config/constants.ts');
+    if (await fs.pathExists(constantsPath)) {
+      let content = await fs.readFile(constantsPath, 'utf8');
+      if (!content.includes('PROXY_API_MODE')) {
+        content = content.replace(
+          /import\s*{\s*PROXY_BASE_URL\s+as\s+ENV_PROXY_URL\s*}\s+from\s+'@env';/,
+          `import {
+  PROXY_BASE_URL as ENV_PROXY_URL,
+  PROXY_API_MODE as ENV_PROXY_API_MODE,
+  PROXY_DEFAULT_APP_NAME as ENV_PROXY_DEFAULT_APP_NAME,
+} from '@env';`
+        );
+        content += `
+export const PROXY_API_MODE = (ENV_PROXY_API_MODE as 'proxy' | 'direct') || 'proxy';
+export const PROXY_DEFAULT_APP_NAME = ENV_PROXY_DEFAULT_APP_NAME;
+`;
+        await fs.writeFile(constantsPath, content);
+      }
+    }
+
+    // Update src/screens/ChatScreen.tsx
+    const chatScreenPath = path.join(targetDir, 'src/screens/ChatScreen.tsx');
+    if (await fs.pathExists(chatScreenPath)) {
+      let content = await fs.readFile(chatScreenPath, 'utf8');
+
+      // Update imports
+      if (
+        content.includes(
+          "import { PROXY_BASE_URL } from '../config/constants';"
+        )
+      ) {
+        content = content.replace(
+          "import { PROXY_BASE_URL } from '../config/constants';",
+          `import {
+  PROXY_BASE_URL,
+  PROXY_API_MODE,
+  PROXY_DEFAULT_APP_NAME,
+} from '../config/constants';`
+        );
+      }
+
+      // Update initialization
+      const initRegex =
+        /new\s+ProxyClient\(\s*{\s*baseUrl:\s*PROXY_BASE_URL\s*}\s*\)/;
+      if (initRegex.test(content)) {
+        content = content.replace(
+          initRegex,
+          `new ProxyClient({
+      baseUrl: PROXY_BASE_URL,
+      apiMode: PROXY_API_MODE,
+      defaultAppName: PROXY_DEFAULT_APP_NAME,
+    })`
+        );
+        await fs.writeFile(chatScreenPath, content);
+      }
+    }
+
+    spinner.succeed(
+      chalk.green(`Updated configuration: PROXY_BASE_URL=${proxyUrl}`)
+    );
   } catch (error) {
     spinner.fail(chalk.red('Failed to update configuration'));
     throw error;

@@ -100,8 +100,12 @@ app.get('/apps', async (req, res) => {
       return res.status(response.status).json({ error });
     }
 
-    const apps = await response.json();
-    res.json({ apps });
+    const data = await response.json();
+    if (Array.isArray(data)) {
+      res.json({ apps: data });
+    } else {
+      res.json(data);
+    }
   } catch (error) {
     console.error('Error listing apps:', error);
     res.status(500).json({ error: error.message });
@@ -551,7 +555,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 ADK Cloud Run Proxy running on port ${PORT}`);
   console.log(`☁️  Cloud Run URL: ${CLOUD_RUN_URL || 'NOT CONFIGURED'}`);

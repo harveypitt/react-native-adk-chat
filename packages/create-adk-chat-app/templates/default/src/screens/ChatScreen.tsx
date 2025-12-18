@@ -12,9 +12,14 @@ import {
   MessageBubble,
   ChatInput,
   ProxyClient,
+  parseButtonOptions,
   type Message,
 } from '@react-native-adk-chat/client';
-import { PROXY_BASE_URL } from '../config/constants';
+import {
+  PROXY_BASE_URL,
+  PROXY_API_MODE,
+  PROXY_DEFAULT_APP_NAME,
+} from '../config/constants';
 
 const DEFAULT_USER_ID = 'user_' + Date.now();
 
@@ -27,7 +32,11 @@ export default function ChatScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const proxyClient = useRef(
-    new ProxyClient({ baseUrl: PROXY_BASE_URL })
+    new ProxyClient({
+      baseUrl: PROXY_BASE_URL,
+      apiMode: PROXY_API_MODE,
+      defaultAppName: PROXY_DEFAULT_APP_NAME,
+    })
   ).current;
 
   // Initialize session
@@ -54,18 +63,19 @@ export default function ChatScreen() {
     initSession();
   }, []);
 
-  const handleSend = async () => {
-    if (!input.trim() || !sessionId || isLoading) return;
+  const handleSend = async (text?: string) => {
+    const contentToSend = text || input.trim();
+    if (!contentToSend || !sessionId || isLoading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input.trim(),
+      content: contentToSend,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setInput('');
+    if (!text) setInput('');
     setIsLoading(true);
 
     const aiMessageId = (Date.now() + 1).toString();
@@ -100,6 +110,20 @@ export default function ChatScreen() {
           );
         }
       );
+
+      const buttons = parseButtonOptions(accumulatedText);
+      if (buttons.length > 0) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMessageId
+              ? {
+                  ...msg,
+                  parts: [{ type: 'buttons', buttons }],
+                }
+              : msg
+          )
+        );
+      }
 
       setIsLoading(false);
     } catch (err) {
@@ -146,7 +170,12 @@ export default function ChatScreen() {
     >
       <FlatList
         data={messages}
-        renderItem={({ item }) => <MessageBubble message={item} />}
+        renderItem={({ item }) => (
+          <MessageBubble
+            message={item}
+            onButtonPress={(val) => handleSend(val)}
+          />
+        )}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messageList}
       />
@@ -154,7 +183,7 @@ export default function ChatScreen() {
       <ChatInput
         value={input}
         onChangeText={setInput}
-        onSend={handleSend}
+        onSend={() => handleSend()}
         disabled={isLoading || !sessionId}
         placeholder="Type a message..."
       />

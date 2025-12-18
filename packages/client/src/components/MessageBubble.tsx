@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Animated, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, Animated, TouchableOpacity, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { ButtonGroup } from "./ButtonGroup";
+import type { MessagePart } from "../api/types";
 
 export interface ToolCall {
   id: string; // Add id to ToolCall for tracking
@@ -17,11 +19,13 @@ export interface Message {
   timestamp: Date;
   isLoading?: boolean;
   toolCalls?: ToolCall[]; // Array of tool calls
+  parts?: MessagePart[];
 }
 
 export interface MessageBubbleProps {
   message: Message;
   onToolCallPress?: (toolCall: ToolCall) => void;
+  onButtonPress?: (value: string) => void;
 }
 
 const LoadingIndicator = () => {
@@ -128,7 +132,11 @@ const ToolCallIndicator: React.FC<{ toolCall: ToolCall, onToolCallPress?: (toolC
   );
 };
 
-const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onToolCallPress }) => {
+const MessageBubble: React.FC<MessageBubbleProps> = ({
+  message,
+  onToolCallPress,
+  onButtonPress,
+}) => {
   const isUser = message.role === "user";
 
   return (
@@ -168,6 +176,20 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onToolCallPress 
             {message.content}
           </Text>
         )}
+        {/* Render message parts (buttons, images, etc.) */}
+        {message.parts?.map((part, index) => {
+          if (part.type === "buttons" && part.buttons) {
+            return (
+              <ButtonGroup
+                key={index}
+                options={part.buttons}
+                onPress={onButtonPress || (() => {})}
+                disabled={!onButtonPress}
+              />
+            );
+          }
+          return null;
+        })}
       </View>
       <Text style={styles.timestamp}>
         {message.timestamp.toLocaleTimeString("en-US", {
@@ -247,6 +269,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.aiMessageBg,
     borderWidth: 1,
     borderColor: colors.aiMessageBorder,
+    ...Platform.select({
+      web: {
+        // @ts-ignore - boxShadow is supported on web
+        boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.05)",
+      },
+      default: {},
+    }),
   },
   messageText: {
     fontSize: typography.messageSize,

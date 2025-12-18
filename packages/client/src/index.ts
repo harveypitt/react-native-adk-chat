@@ -5,11 +5,14 @@ export type { ChatInputProps } from "./components/ChatInput";
 export { default as MessageBubble } from "./components/MessageBubble";
 export type { Message, MessageBubbleProps, ToolCall } from "./components/MessageBubble";
 
+export { ButtonGroup } from "./components/ButtonGroup";
+export type { ButtonGroupProps } from "./components/ButtonGroup";
+
 export { default as ToolResponseDebugScreen } from "./components/ToolResponseDebugScreen";
 
 // API Clients
 export { ADKClient } from "./api/adkClient";
-export { ProxyClient } from "./api/proxyClient";
+export { ProxyClient, parseButtonOptions } from "./api/proxyClient";
 
 // Types
 export type {
@@ -19,6 +22,8 @@ export type {
   ADKResponseItem,
   CreateSessionRequest,
   SessionData,
+  ButtonOption,
+  MessagePart,
 } from "./api/types";
 
 export type {

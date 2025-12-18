@@ -7,6 +7,7 @@
 export interface ProxyConfig {
   baseUrl: string; // e.g., "http://localhost:3000" or "https://your-proxy.vercel.app"
   defaultAppName?: string; // Optional default app name (for Cloud Run deployments)
+  apiMode?: 'proxy' | 'direct'; // 'proxy' for middleware, 'direct' for direct Cloud Run/Agent Engine access
 }
 
 export interface CreateSessionResponse {
@@ -41,6 +42,32 @@ export interface ChatRequest {
   message: string;
   app_name?: string; // Optional app name (for Cloud Run deployments)
   run_config?: Record<string, any>;
+}
+
+import { ButtonOption } from './types';
+
+/**
+ * Parse button options from text patterns like:
+ * "Which one?\n\nOPTIONS:\n- Option A\n- Option B\n- Option C"
+ */
+export function parseButtonOptions(text: string): ButtonOption[] {
+  const optionsMatch = text.match(/OPTIONS?:\s*\n((?:[-•]\s*.+\n?)+)/i);
+
+  if (!optionsMatch) {
+    return [];
+  }
+
+  const optionsText = optionsMatch[1];
+  const lines = optionsText.split('\n').filter((line) => line.trim());
+
+  return lines.map((line, index) => {
+    const label = line.replace(/^[-•]\s*/, '').trim();
+    return {
+      id: `option_${index}`,
+      label,
+      value: label,
+    };
+  });
 }
 
 export class ProxyClient {
@@ -95,6 +122,37 @@ export class ProxyClient {
     appName?: string
   ): Promise<CreateSessionResponse> {
     try {
+      const effectiveAppName = appName || this.config.defaultAppName;
+      const effectiveSessionId = sessionId || ProxyClient.generateSessionId();
+
+      if (this.config.apiMode === 'direct') {
+        if (!effectiveAppName) throw new Error("App name required for direct mode");
+
+        const url = `${this.config.baseUrl}/apps/${effectiveAppName}/users/${userId}/sessions/${effectiveSessionId}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: response.statusText }));
+          throw new Error(`Failed to create session: ${error.error || response.statusText}`);
+        }
+
+        const data = await response.json();
+        return {
+          output: {
+            id: data.id,
+            userId: data.userId,
+            appName: data.appName,
+            lastUpdateTime: data.lastUpdateTime,
+            state: data.state,
+            events: data.events,
+          }
+        } as CreateSessionResponse;
+      }
+
       const response = await fetch(`${this.config.baseUrl}/sessions/create`, {
         method: "POST",
         headers: {
@@ -103,7 +161,7 @@ export class ProxyClient {
         body: JSON.stringify({
           user_id: userId,
           ...(sessionId && { session_id: sessionId }),
-          ...(appName || this.config.defaultAppName) && { app_name: appName || this.config.defaultAppName },
+          ...(effectiveAppName && { app_name: effectiveAppName }),
         }),
       });
 
@@ -134,6 +192,33 @@ export class ProxyClient {
    */
   async getSession(userId: string, sessionId: string, appName?: string): Promise<SessionData> {
     try {
+      const effectiveAppName = appName || this.config.defaultAppName;
+
+      if (this.config.apiMode === 'direct') {
+        if (!effectiveAppName) throw new Error("App name required for direct mode");
+
+        const url = `${this.config.baseUrl}/apps/${effectiveAppName}/users/${userId}/sessions/${sessionId}`;
+        const response = await fetch(url, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: response.statusText }));
+          throw new Error(`Failed to get session: ${error.error || response.statusText}`);
+        }
+
+        const data = await response.json();
+        return {
+          id: data.id,
+          userId: data.userId,
+          appName: data.appName,
+          lastUpdateTime: data.lastUpdateTime,
+          state: data.state,
+          events: data.events,
+        };
+      }
+
       const response = await fetch(`${this.config.baseUrl}/sessions/get`, {
         method: "POST",
         headers: {
@@ -142,7 +227,7 @@ export class ProxyClient {
         body: JSON.stringify({
           user_id: userId,
           session_id: sessionId,
-          ...(appName || this.config.defaultAppName) && { app_name: appName || this.config.defaultAppName },
+          ...(effectiveAppName && { app_name: effectiveAppName }),
         }),
       });
 
@@ -249,17 +334,36 @@ export class ProxyClient {
   ): Promise<string> {
     try {
       // Add default app_name if configured and not provided in request
+      const effectiveAppName = request.app_name || this.config.defaultAppName;
       const requestWithDefaults = {
         ...request,
-        ...(this.config.defaultAppName && !request.app_name) && { app_name: this.config.defaultAppName },
+        ...(effectiveAppName && { app_name: effectiveAppName }),
       };
 
-      const response = await fetch(`${this.config.baseUrl}/chat`, {
+      let url = `${this.config.baseUrl}/chat`;
+      let body = requestWithDefaults as any;
+
+      if (this.config.apiMode === 'direct') {
+        if (!effectiveAppName) throw new Error("App name required for direct mode");
+        url = `${this.config.baseUrl}/run_sse`;
+        body = {
+          app_name: effectiveAppName,
+          user_id: request.user_id,
+          session_id: request.session_id,
+          new_message: {
+            role: 'user',
+            parts: [{ text: request.message }]
+          },
+          streaming: true,
+        };
+      }
+
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(requestWithDefaults),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -474,7 +578,8 @@ export class ProxyClient {
    */
   async checkHealth(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.config.baseUrl}/health`);
+      const endpoint = this.config.apiMode === 'direct' ? '/list-apps' : '/health';
+      const response = await fetch(`${this.config.baseUrl}${endpoint}`);
       return response.ok;
     } catch {
       return false;
