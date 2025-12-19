@@ -12,13 +12,28 @@ program
   .description('Create a new ADK chat application')
   .argument('[app-name]', 'Name of your app')
   .option('-t, --template <template>', 'Template to use', 'default')
-  .option('--update', 'Update configuration for an existing app')
+  .option('--update', 'Update bundled code (server/client) from GitHub (does not change settings)')
+  .option('--reconfigure', 'Update configuration settings only (proxy URL, app name, etc.)')
   .option('--proxy-url <url>', 'URL of the proxy server')
+  .addHelpText('after', `
+
+Examples:
+  $ create-adk-chat-app my-app              Create new app
+  $ create-adk-chat-app --update            Pull latest code changes
+  $ create-adk-chat-app --reconfigure       Change proxy settings
+  $ create-adk-chat-app --update --reconfigure   Update code and settings
+`)
   .action(async (appName: string | undefined, options) => {
     const isUpdate = options.update;
+    const isReconfigure = options.reconfigure;
+    const isUpdateMode = isUpdate || isReconfigure;
 
-    if (isUpdate) {
-      console.log(chalk.blue('🔄 Update ADK Chat App Configuration\n'));
+    if (isUpdate && isReconfigure) {
+      console.log(chalk.blue('🔄 Update Code & Reconfigure ADK Chat App\n'));
+    } else if (isUpdate) {
+      console.log(chalk.blue('⬇️  Update ADK Chat App Code\n'));
+    } else if (isReconfigure) {
+      console.log(chalk.blue('⚙️  Reconfigure ADK Chat App\n'));
     } else {
       console.log(chalk.blue('🚀 Create ADK Chat App\n'));
 
@@ -43,18 +58,21 @@ program
       }
     }
 
-    // Prompt for proxy configuration
-    const configResponse = await prompts([
-      {
-        type: 'select',
-        name: 'backendType',
-        message: 'Which proxy server type do you need?',
-        choices: [
-          { title: 'Cloud Run Proxy (Recommended)', value: 'cloud-run' },
-          { title: 'Agent Engine Proxy', value: 'agent-engine' },
-        ],
-        initial: 0,
-      },
+    // Prompt for proxy configuration (skip if --update without --reconfigure)
+    let configResponse: any = {};
+
+    if (!isUpdate || isReconfigure) {
+      configResponse = await prompts([
+        {
+          type: 'select',
+          name: 'backendType',
+          message: 'Which proxy server type do you need?',
+          choices: [
+            { title: 'Cloud Run Proxy (Recommended)', value: 'cloud-run' },
+            { title: 'Agent Engine Proxy', value: 'agent-engine' },
+          ],
+          initial: 0,
+        },
       {
         type: options.proxyUrl ? null : 'select',
         name: 'connectionType',
@@ -89,12 +107,13 @@ program
             ? true
             : 'App Name is required for direct connection',
       },
-    ]);
+      ]);
 
-    // Handle cancellation
-    if (!options.proxyUrl && !configResponse.connectionType) {
-      console.log(chalk.yellow('Operation cancelled'));
-      process.exit(0);
+      // Handle cancellation
+      if (!options.proxyUrl && !configResponse.connectionType && !isUpdate) {
+        console.log(chalk.yellow('Operation cancelled'));
+        process.exit(0);
+      }
     }
 
     const proxyUrl = options.proxyUrl ||
@@ -112,10 +131,18 @@ program
       : process.cwd();
 
     try {
-      if (isUpdate) {
+      if (isUpdateMode) {
         // @ts-ignore
-        await updateAppConfig(targetDir, proxyUrl, apiMode, defaultAppName, backendType);
-        console.log(chalk.green(`\n✅ Successfully updated configuration!\n`));
+        await updateAppConfig(targetDir, proxyUrl, apiMode, defaultAppName, backendType, isUpdate, isReconfigure);
+
+        if (isUpdate && isReconfigure) {
+          console.log(chalk.green(`\n✅ Successfully updated code and configuration!\n`));
+        } else if (isUpdate) {
+          console.log(chalk.green(`\n✅ Successfully updated code from GitHub!\n`));
+          console.log(chalk.cyan(`💡 To reconfigure settings, run: npx create-adk-chat-app --reconfigure\n`));
+        } else {
+          console.log(chalk.green(`\n✅ Successfully updated configuration!\n`));
+        }
       } else {
         if (!appName) throw new Error('App name required for creation'); // Should be caught above
 

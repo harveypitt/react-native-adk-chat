@@ -8,16 +8,16 @@
     "example/demo-app"
   ],
   "scripts": {
+    "clean": "rm -rf node_modules packages/*/node_modules example/*/node_modules",
     "client": "npm run dev --workspace=packages/client",
+    "demo": "pnpm start --workspace=example/demo-app",
+    "demo:agentengine": "concurrently --kill-others --names \"PROXY,DEMO_APP\" --prefix-colors \"bgBlue.bold,bgMagenta.bold\" \"PORT=3000 AGENT_ENGINE_URL=$AGENT_ENGINE_URL GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS pnpm --filter @react-native-adk-chat/server-agentengine start\" \"EXPO_PUBLIC_PROXY_BASE_URL=http://localhost:3000 pnpm --filter @react-native-adk-chat/demo-app start\"",
+    "demo:cloudrun": "concurrently --kill-others --names \"PROXY,DEMO_APP\" --prefix-colors \"bgBlue.bold,bgMagenta.bold\" \"PORT=3000 CLOUD_RUN_URL=$CLOUD_RUN_URL DEFAULT_APP_NAME=$DEFAULT_APP_NAME pnpm --filter @anthropic/adk-proxy-cloudrun start\" \"EXPO_PUBLIC_PROXY_BASE_URL=http://localhost:3000 pnpm --filter @react-native-adk-chat/demo-app start\"",
+    "install:all": "npm install && npm install --workspace=packages/server-agentengine && npm install --workspace=packages/server-cloudrun",
     "server:agentengine": "npm run dev --workspace=packages/server-agentengine",
     "server:agentengine:start": "npm start --workspace=packages/server-agentengine",
     "server:cloudrun": "npm run dev --workspace=packages/server-cloudrun",
-    "server:cloudrun:start": "npm start --workspace=packages/server-cloudrun",
-    "demo": "npm start --workspace=example/demo-app",
-    "demo:agentengine": "npm run start:agentengine --workspace=example/demo-app",
-    "demo:cloudrun": "npm run start:cloudrun --workspace=example/demo-app",
-    "install:all": "npm install && npm install --workspace=packages/server-agentengine && npm install --workspace=packages/server-cloudrun",
-    "clean": "rm -rf node_modules packages/*/node_modules example/*/node_modules"
+    "server:cloudrun:start": "npm start --workspace=packages/server-cloudrun"
   },
   "keywords": [
     "react-native",
@@ -27,9 +27,11 @@
     "chat",
     "ai"
   ],
-  "author": "",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }

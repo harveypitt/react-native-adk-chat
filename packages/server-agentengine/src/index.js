@@ -5,7 +5,18 @@ const cors = require('cors');
 const { GoogleAuth } = require('google-auth-library');
 
 const app = express();
-app.use(cors());
+
+// Configure CORS to allow requests from any origin
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false
+}));
+
+// Handle preflight requests
+app.options('*', cors());
+
 app.use(express.json());
 
 // Initialize Google Auth with service account

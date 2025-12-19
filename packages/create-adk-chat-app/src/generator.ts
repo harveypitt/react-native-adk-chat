@@ -125,106 +125,172 @@ export async function updateAppConfig(
   proxyUrl: string,
   apiMode?: 'proxy' | 'direct',
   defaultAppName?: string,
-  backendType?: 'cloud-run' | 'agent-engine'
+  backendType?: 'cloud-run' | 'agent-engine',
+  isUpdateCode?: boolean,
+  isReconfigure?: boolean
 ) {
-  const spinner = ora('Updating configuration...').start();
+  let spinnerText = 'Processing...';
+  if (isUpdateCode && isReconfigure) {
+    spinnerText = 'Updating code and configuration...';
+  } else if (isUpdateCode) {
+    spinnerText = 'Updating code from GitHub...';
+  } else {
+    spinnerText = 'Updating configuration...';
+  }
+  const spinner = ora(spinnerText).start();
 
   try {
-    const envPath = path.join(targetDir, '.env');
-    let envContent = '';
+    // Only update .env if reconfiguring
+    if (isReconfigure || (!isUpdateCode && !isReconfigure)) {
+      spinner.text = 'Updating .env file...';
+      const envPath = path.join(targetDir, '.env');
+      let envContent = '';
 
-    if (await fs.pathExists(envPath)) {
-      envContent = await fs.readFile(envPath, 'utf8');
-    }
-
-    let newContent = envContent;
-
-    const updateOrAdd = (key: string, value: string) => {
-      const regex = new RegExp(`^${key}=.*$`, 'm');
-      const newLine = `${key}=${value}`;
-      if (regex.test(newContent)) {
-        newContent = newContent.replace(regex, newLine);
-      } else {
-        newContent =
-          newContent +
-          (newContent && !newContent.endsWith('\n') ? '\n' : '') +
-          newLine +
-          '\n';
+      if (await fs.pathExists(envPath)) {
+        envContent = await fs.readFile(envPath, 'utf8');
       }
-    };
 
-    updateOrAdd('PROXY_BASE_URL', proxyUrl);
+      let newContent = envContent;
 
-    if (apiMode) {
-      updateOrAdd('PROXY_API_MODE', apiMode);
-    }
+      const updateOrAdd = (key: string, value: string) => {
+        const regex = new RegExp(`^${key}=.*$`, 'm');
+        const newLine = `${key}=${value}`;
+        if (regex.test(newContent)) {
+          newContent = newContent.replace(regex, newLine);
+        } else {
+          newContent =
+            newContent +
+            (newContent && !newContent.endsWith('\n') ? '\n' : '') +
+            newLine +
+            '\n';
+        }
+      };
 
-    if (defaultAppName) {
-      updateOrAdd('PROXY_DEFAULT_APP_NAME', defaultAppName);
-    }
+      updateOrAdd('PROXY_BASE_URL', proxyUrl);
 
-    await fs.writeFile(envPath, newContent);
+      if (apiMode) {
+        updateOrAdd('PROXY_API_MODE', apiMode);
+      }
 
-    // Update src/config/constants.ts
-    const constantsPath = path.join(targetDir, 'src/config/constants.ts');
-    if (await fs.pathExists(constantsPath)) {
-      let content = await fs.readFile(constantsPath, 'utf8');
-      if (!content.includes('PROXY_API_MODE')) {
-        content = content.replace(
-          /import\s*{\s*PROXY_BASE_URL\s+as\s+ENV_PROXY_URL\s*}\s+from\s+'@env';/,
-          `import {
+      if (defaultAppName) {
+        updateOrAdd('PROXY_DEFAULT_APP_NAME', defaultAppName);
+      }
+
+      await fs.writeFile(envPath, newContent);
+
+      // Update src/config/constants.ts
+      spinner.text = 'Updating constants...';
+      const constantsPath = path.join(targetDir, 'src/config/constants.ts');
+      if (await fs.pathExists(constantsPath)) {
+        let content = await fs.readFile(constantsPath, 'utf8');
+        if (!content.includes('PROXY_API_MODE')) {
+          content = content.replace(
+            /import\s*{\s*PROXY_BASE_URL\s+as\s+ENV_PROXY_URL\s*}\s+from\s+'@env';/,
+            `import {
   PROXY_BASE_URL as ENV_PROXY_URL,
   PROXY_API_MODE as ENV_PROXY_API_MODE,
   PROXY_DEFAULT_APP_NAME as ENV_PROXY_DEFAULT_APP_NAME,
 } from '@env';`
-        );
-        content += `
+          );
+          content += `
 export const PROXY_API_MODE = (ENV_PROXY_API_MODE as 'proxy' | 'direct') || 'proxy';
 export const PROXY_DEFAULT_APP_NAME = ENV_PROXY_DEFAULT_APP_NAME;
 `;
-        await fs.writeFile(constantsPath, content);
+          await fs.writeFile(constantsPath, content);
+        }
       }
-    }
 
-    // Update src/screens/ChatScreen.tsx
-    const chatScreenPath = path.join(targetDir, 'src/screens/ChatScreen.tsx');
-    if (await fs.pathExists(chatScreenPath)) {
-      let content = await fs.readFile(chatScreenPath, 'utf8');
+      // Update src/screens/ChatScreen.tsx
+      spinner.text = 'Updating ChatScreen...';
+      const chatScreenPath = path.join(targetDir, 'src/screens/ChatScreen.tsx');
+      if (await fs.pathExists(chatScreenPath)) {
+        let content = await fs.readFile(chatScreenPath, 'utf8');
 
-      // Update imports
-      if (
-        content.includes(
-          "import { PROXY_BASE_URL } from '../config/constants';"
-        )
-      ) {
-        content = content.replace(
-          "import { PROXY_BASE_URL } from '../config/constants';",
-          `import {
+        // Update imports
+        if (
+          content.includes(
+            "import { PROXY_BASE_URL } from '../config/constants';"
+          )
+        ) {
+          content = content.replace(
+            "import { PROXY_BASE_URL } from '../config/constants';",
+            `import {
   PROXY_BASE_URL,
   PROXY_API_MODE,
   PROXY_DEFAULT_APP_NAME,
 } from '../config/constants';`
-        );
-      }
+          );
+        }
 
-      // Update initialization
-      const initRegex =
-        /new\s+ProxyClient\(\s*{\s*baseUrl:\s*PROXY_BASE_URL\s*}\s*\)/;
-      if (initRegex.test(content)) {
-        content = content.replace(
-          initRegex,
-          `new ProxyClient({
+        // Update initialization
+        const initRegex =
+          /new\s+ProxyClient\(\s*{\s*baseUrl:\s*PROXY_BASE_URL\s*}\s*\)/;
+        if (initRegex.test(content)) {
+          content = content.replace(
+            initRegex,
+            `new ProxyClient({
       baseUrl: PROXY_BASE_URL,
       apiMode: PROXY_API_MODE,
       defaultAppName: PROXY_DEFAULT_APP_NAME,
     })`
-        );
-        await fs.writeFile(chatScreenPath, content);
+          );
+          await fs.writeFile(chatScreenPath, content);
+        }
       }
     }
 
-    // Update bundled server if backendType is provided
-    if (backendType) {
+    // Update bundled server and client if --update flag is used
+    if (isUpdateCode) {
+      // Update client package
+      const localClientPath = path.resolve(__dirname, '../../client');
+      const hasLocalClient = await fs.pathExists(path.join(localClientPath, 'package.json'));
+
+      if (hasLocalClient) {
+        spinner.text = 'Updating client package from GitHub...';
+        const vendorDir = path.join(targetDir, 'modules/client');
+        if (await fs.pathExists(vendorDir)) {
+          await fs.emptyDir(vendorDir);
+          await fs.copy(localClientPath, vendorDir, {
+            filter: (src) => {
+              const basename = path.basename(src);
+              return basename !== 'node_modules' && basename !== 'dist' && basename !== '.git';
+            },
+          });
+        }
+      }
+
+      // Update server package
+      const serverPackageName =
+        backendType === 'agent-engine'
+          ? 'server-agentengine'
+          : 'server-cloudrun';
+      const localServerPath = path.resolve(
+        __dirname,
+        '../../',
+        serverPackageName
+      );
+      const hasLocalServer = await fs.pathExists(
+        path.join(localServerPath, 'package.json')
+      );
+
+      if (hasLocalServer) {
+        spinner.text = `Updating server package (${serverPackageName}) from GitHub...`;
+        const serverDir = path.join(targetDir, 'server');
+        if (await fs.pathExists(serverDir)) {
+          await fs.emptyDir(serverDir);
+
+          await fs.copy(localServerPath, serverDir, {
+            filter: (src) => {
+              const basename = path.basename(src);
+              return basename !== 'node_modules' && basename !== '.git';
+            },
+          });
+        }
+      }
+    }
+
+    // Update bundled server type if reconfiguring and backendType changed
+    if (isReconfigure && backendType) {
       const serverPackageName =
         backendType === 'agent-engine'
           ? 'server-agentengine'
@@ -278,9 +344,13 @@ export const PROXY_DEFAULT_APP_NAME = ENV_PROXY_DEFAULT_APP_NAME;
       }
     }
 
-    spinner.succeed(
-      chalk.green(`Updated configuration: PROXY_BASE_URL=${proxyUrl}`)
-    );
+    if (isUpdateCode && isReconfigure) {
+      spinner.succeed(chalk.green('Updated code and configuration'));
+    } else if (isUpdateCode) {
+      spinner.succeed(chalk.green('Updated code from GitHub'));
+    } else {
+      spinner.succeed(chalk.green(`Updated configuration: PROXY_BASE_URL=${proxyUrl}`));
+    }
   } catch (error) {
     spinner.fail(chalk.red('Failed to update configuration'));
     throw error;

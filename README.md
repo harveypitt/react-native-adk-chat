@@ -6,6 +6,15 @@ A clean, production-ready React Native package for building chat interfaces that
 ![React Native](https://img.shields.io/badge/React%20Native-0.76-blue.svg)
 ![Expo](https://img.shields.io/badge/Expo-52.0-blue.svg)
 
+---
+
+**📚 Documentation:**
+- **[Quick Start Guide](./QUICKSTART.md)** - Visual step-by-step for getting started (5 min)
+- **[Development Guide](./DEVELOPMENT.md)** - For monorepo contributors and package developers
+- **[API Reference](#api-reference)** - Component and client API documentation (below)
+
+---
+
 ## What is this?
 
 This package provides pre-built React Native components and API clients to quickly add AI chat capabilities to your mobile app. It handles:
@@ -100,50 +109,178 @@ Before starting, you need:
 
 ## Quick Start
 
-### Step 1: Create a New App
+Choose your path based on what you want to do:
 
-The fastest way to get started is using our CLI tool. It creates a full React Native app with the proxy server bundled inside:
+### 🚀 For New Projects (Recommended)
 
-```bash
-npx create-adk-chat-app my-chat-app
-```
+**Use the CLI to scaffold a complete React Native app with proxy bundled:**
 
-The CLI will ask for:
-1.  **Project Name**: Directory for your new app.
-2.  **Proxy Type**: Choose **Cloud Run Proxy** (Recommended).
-3.  **Connection**: Select **Local Proxy (localhost:3000)** for best compatibility (especially for Web).
-4.  **Cloud Run URL**: Your remote agent URL (e.g., `https://mbs-v2...run.app`).
+1. **Create your app:**
+   ```bash
+   # Recommended: Direct from GitHub (always pulls latest)
+   npx github:harveypitt/react-native-adk-chat/packages/create-adk-chat-app my-chat-app
 
-### Step 2: Start the App
+   # Or install globally
+   npm install -g github:harveypitt/react-native-adk-chat#main:packages/create-adk-chat-app
+   create-adk-chat-app my-chat-app
+   ```
 
-Navigate to your new app:
+2. **Configure during setup:**
+   - Choose **Cloud Run Proxy** (recommended) or **Agent Engine Proxy**
+   - Select **Local Proxy (localhost:3000)** for development
+   - Enter your Cloud Run URL (e.g., `https://your-agent-xyz.run.app`)
+
+3. **Start everything:**
+   ```bash
+   cd my-chat-app
+   npm install
+   npm start  # Launches proxy + app together
+   ```
+
+4. **Test:**
+   - Press `w` (web), `i` (iOS), or `a` (Android)
+   - Send a message to verify the connection
+
+**What you get:** A ready-to-run app with proxy server, all dependencies installed, and environment configured.
+
+---
+
+### 🔧 For Monorepo Development
+
+**Working on this package or running the demo apps:**
+
+#### Option 1: Cloud Run Demo
+
+1. **Set up environment variables** (copy `.env.example` files):
+   ```bash
+   # From monorepo root
+   export CLOUD_RUN_URL="https://your-agent-xyz.run.app"
+   export DEFAULT_APP_NAME="your-app-name"  # Optional
+   ```
+
+2. **Run the demo:**
+   ```bash
+   pnpm demo:cloudrun
+   ```
+   
+   This single command uses `concurrently` to automatically:
+   - Start `server-cloudrun` proxy on `http://localhost:3000`
+   - Start the demo app configured to use that proxy
+   - Show color-coded logs for both services
+
+3. **Test:** Press `w`, `i`, or `a` in the terminal
+
+#### Option 2: Agent Engine Demo
+
+1. **Set up environment variables:**
+   ```bash
+   # From monorepo root
+   export AGENT_ENGINE_URL="https://region-project-agent.a.run.app"
+   export GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account.json"
+   ```
+
+2. **Run the demo:**
+   ```bash
+   pnpm demo:agentengine
+   ```
+
+3. **Test:** Press `w`, `i`, or `a` in the terminal
+
+**Note:** Both demo scripts are self-contained. You don't need to manually start proxy servers - `concurrently` handles everything.
+
+---
+
+### Updating an Existing CLI App
+
+**Pull latest code changes (recommended after repo updates):**
 
 ```bash
 cd my-chat-app
-npm install  # Installs app AND proxy dependencies
-npm start
+
+# Update bundled server & client code from GitHub
+npx github:harveypitt/react-native-adk-chat/packages/create-adk-chat-app --update
 ```
 
-This command launches both the **App** (Expo) and the **Proxy Server** concurrently. You will see logs for both in the terminal:
-- `[PROXY]` logs show communication with your Cloud Run agent.
-- `[APP]` logs show Metro bundler output.
+**What this does:**
+- Fetches latest CLI from GitHub
+- Updates bundled proxy server with latest CORS fixes, bug fixes, etc.
+- Updates client package with latest components
+- **Does NOT change your .env settings**
 
-Press `w` for Web, `i` for iOS Simulator, or `a` for Android Emulator.
+---
 
-### Step 3: Test the Chat
-
-1.  The app connects to `http://localhost:3000`.
-2.  The bundled proxy forwards requests to your Cloud Run URL.
-3.  Send a message like "Hello!" to verify the flow.
-
-### Configuring an Existing App
-
-If you need to change your Cloud Run URL or switch connection modes later:
+**Reconfigure settings (change proxy URL, app name, etc.):**
 
 ```bash
-# Inside your app directory
-npx create-adk-chat-app --update
+cd my-chat-app
+
+# Reconfigure your proxy settings
+npx github:harveypitt/react-native-adk-chat/packages/create-adk-chat-app --reconfigure
 ```
+
+**What this does:**
+- Prompts you to change proxy URL, backend type, app name
+- Updates your `.env` file
+- Updates configuration files
+- **Does NOT update bundled code**
+
+---
+
+**Do both at once:**
+
+```bash
+cd my-chat-app
+
+# Update code AND reconfigure
+npx github:harveypitt/react-native-adk-chat/packages/create-adk-chat-app --update --reconfigure
+```
+
+## Quick Command Reference
+
+### New Projects (CLI)
+```bash
+# Create new app from GitHub (pulls latest automatically)
+npx github:harveypitt/react-native-adk-chat/packages/create-adk-chat-app my-chat-app
+
+# Start everything (proxy + app)
+cd my-chat-app && npm install && npm start
+
+# Update code only (pulls latest server/client from GitHub)
+npx github:harveypitt/react-native-adk-chat/packages/create-adk-chat-app --update
+
+# Reconfigure settings (change proxy URL, app name)
+npx github:harveypitt/react-native-adk-chat/packages/create-adk-chat-app --reconfigure
+
+# Both
+npx github:harveypitt/react-native-adk-chat/packages/create-adk-chat-app --update --reconfigure
+```
+
+### Monorepo Development
+```bash
+# Cloud Run demo (starts proxy on :3000 + demo app)
+export CLOUD_RUN_URL="https://your-agent-xyz.run.app"
+export DEFAULT_APP_NAME="your-app-name"
+pnpm demo:cloudrun
+
+# Agent Engine demo (starts proxy on :3000 + demo app)
+export AGENT_ENGINE_URL="https://region-project-agent.a.run.app"
+export GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account.json"
+pnpm demo:agentengine
+
+# Manual proxy startup (if needed)
+pnpm server:cloudrun        # Dev mode with watch
+pnpm server:cloudrun:start  # Production mode
+pnpm server:agentengine     # Dev mode with watch
+pnpm server:agentengine:start  # Production mode
+```
+
+**Key Points:**
+- All proxies default to `http://localhost:3000`
+- `demo:*` scripts use `concurrently` to start proxy + app automatically
+- No need to manually start proxy servers when using demo scripts
+- Environment variables are passed through from your shell
+
+---
 
 ## Using in Your Own React Native App
 
@@ -152,15 +289,17 @@ npx create-adk-chat-app --update
 Install the client package in your React Native project:
 
 ```bash
-# Option 1: From git repository (recommended)
-npm install git+https://github.com/your-username/react-native-adk-chat.git#main:packages/client
+# Install from GitHub
+npm install github:harveypitt/react-native-adk-chat#main:packages/client
 
-# Option 2: From local clone (during development)
-npm install /path/to/react-native-adk-chat/packages/client
+# Or with full URL syntax
+npm install git+https://github.com/harveypitt/react-native-adk-chat.git#main:packages/client
 
 # Install peer dependencies
-npm install @expo/vector-icons react-native-safe-area-context
+npm install @expo/vector-icons react-native-safe-area-context react-native-gesture-handler react-native-screens @react-navigation/native @react-navigation/stack
 ```
+
+**Note:** The package is not yet published to npm. Install directly from GitHub using the commands above.
 
 ### Basic Implementation
 
@@ -456,6 +595,68 @@ eas submit --platform android
 
 ## Troubleshooting
 
+### Demo Script Issues
+
+#### Demo won't start / "Command not found"
+
+**Symptoms:** `pnpm demo:cloudrun` or `pnpm demo:agentengine` fails immediately
+
+**Solutions:**
+1. Ensure you're in the monorepo root directory
+2. Run `pnpm install` to ensure all dependencies (including `concurrently`) are installed
+3. Check pnpm is installed: `pnpm --version`
+4. Verify environment variables are exported in your current shell
+
+#### Proxy starts but demo app fails
+
+**Symptoms:** See `[PROXY]` logs but `[DEMO_APP]` errors or doesn't start
+
+**Solutions:**
+1. Check Expo is installed: `cd example/demo-app && pnpm list expo`
+2. Clear Expo cache: `cd example/demo-app && rm -rf .expo node_modules && pnpm install`
+3. Check port 19000-19001 are available (used by Metro bundler)
+4. Try starting demo app separately: `pnpm --filter @react-native-adk-chat/demo-app start`
+
+#### "Address already in use" (EADDRINUSE)
+
+**Symptoms:** Error about port 3000 being in use
+
+**Solutions:**
+1. Find and kill the process: `lsof -ti:3000 | xargs kill -9`
+2. Or use a different port: `PORT=4000 pnpm demo:cloudrun` (note: won't work without updating demo app config)
+3. Check if you have another proxy/server running
+
+#### Environment variables not working
+
+**Symptoms:** Proxy starts but fails to connect to Cloud Run/Agent Engine
+
+**Solutions:**
+1. Export variables in the same shell before running demo: 
+   ```bash
+   export CLOUD_RUN_URL="https://your-url.run.app"
+   pnpm demo:cloudrun
+   ```
+2. Check variables are set: `echo $CLOUD_RUN_URL`
+3. Don't use `.env` files - demo scripts expect shell environment variables
+4. For persistent config, add exports to `~/.zshrc` or `~/.bashrc`
+
+#### Logs are confusing / too verbose
+
+**Symptoms:** Hard to read combined proxy + app logs
+
+**Solutions:**
+1. Run components separately:
+   ```bash
+   # Terminal 1
+   pnpm server:cloudrun
+   
+   # Terminal 2
+   cd example/demo-app && pnpm start
+   ```
+2. The `[PROXY]` prefix is blue, `[DEMO_APP]` is magenta in color terminals
+
+---
+
 ### "Cannot connect to proxy server"
 
 **Symptoms:** Red dot, "Network request failed"
@@ -467,12 +668,54 @@ eas submit --platform android
    # Find your IP
    ipconfig getifaddr en0  # macOS
    ipconfig               # Windows
-   
+
    # Update App.tsx
    const PROXY_BASE_URL = "http://192.168.1.100:3000";
    ```
 3. Ensure phone and computer on same WiFi network
 4. Check firewall allows connections on port 3000
+
+### CORS Error: "Missing Access-Control-Allow-Origin header"
+
+**Symptoms:** Browser console shows CORS error, preflight request blocked
+
+**Solutions:**
+1. **Ensure proxy server is running** - CORS errors often mean the proxy isn't started:
+   ```bash
+   # Check if proxy is running
+   curl http://localhost:3000/health
+
+   # If not running, start it
+   pnpm server:cloudrun
+   # or
+   pnpm server:agentengine
+   ```
+
+2. **Restart the proxy server** - Updated CORS configuration requires restart:
+   ```bash
+   # Stop current proxy (Ctrl+C)
+   # Start fresh
+   pnpm server:cloudrun
+   ```
+
+3. **For web development** - Make sure you're using the proxy:
+   - The proxy handles CORS headers automatically
+   - Direct calls to Cloud Run/Agent Engine from browser will fail
+   - Always route through `http://localhost:3000`
+
+4. **For deployed proxies** - Verify CORS is enabled:
+   ```javascript
+   // Both proxy servers now have explicit CORS configuration
+   app.use(cors({
+     origin: '*',
+     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+     allowedHeaders: ['Content-Type', 'Authorization']
+   }));
+   ```
+
+5. **Check browser console** for specific CORS details:
+   - "Preflight request" error → Proxy not responding to OPTIONS
+   - "No 'Access-Control-Allow-Origin'" → Proxy not running or misconfigured
 
 ### "Failed to create session"
 
