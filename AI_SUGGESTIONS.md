@@ -30,9 +30,20 @@ Sends suggestions as SSE event to client
 
 ## Setup
 
-### 1. Get a Gemini API Key
+### 1. Choose Authentication Method
 
-Visit [Google AI Studio](https://aistudio.google.com/app/apikey) to create a free API key.
+**Google AI (API Key)** - Recommended for Development
+- ✅ Quick setup with API key
+- ✅ Free tier: 15 requests/min, 1M tokens/day
+- ❌ Not recommended for production (API key exposure risk)
+- Get your key: [Google AI Studio](https://aistudio.google.com/app/apikey)
+
+**Vertex AI (ADC)** - Recommended for Production
+- ✅ Enterprise-grade security with service accounts
+- ✅ Better rate limits and SLAs
+- ✅ Integrated with GCP IAM
+- ❌ Requires GCP project setup
+- Setup: [Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)
 
 ### 2. Configure Your Proxy
 
@@ -47,23 +58,55 @@ npx create-adk-chat-app --reconfigure
 
 Answer "yes" to "Enable AI-powered suggestion generation?" and provide your API key.
 
-**Option B: Manual Configuration**
+**Option B: Manual Configuration - Google AI (Development)**
 
 Add to your proxy server's `.env` file:
 ```bash
 ENABLE_AI_SUGGESTIONS=true
-GEMINI_API_KEY=your-api-key-here
+GEMINI_API_KEY=your-api-key-here  # From https://aistudio.google.com/app/apikey
+```
+
+**Option C: Manual Configuration - Vertex AI (Production)**
+
+Add to your proxy server's `.env` file:
+```bash
+ENABLE_AI_SUGGESTIONS=true
+USE_VERTEX_AI=true
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+GOOGLE_CLOUD_LOCATION=us-central1  # Optional, defaults to us-central1
+```
+
+Then configure Application Default Credentials:
+```bash
+# Option 1: User credentials (development)
+gcloud auth application-default login
+
+# Option 2: Service account (production)
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
 ```
 
 ### 3. Start Your Proxy
 
 The proxy will log the AI suggestions status on startup:
+
+**Google AI mode:**
 ```
 🚀 ADK Cloud Run Proxy running on port 3000
 ☁️  Cloud Run URL: https://your-agent.run.app
 📦 Default App: MBS
 🔧 Debug mode: OFF
 🤖 AI Suggestions: ENABLED
+✅ AI Suggestions: Initialized with Google AI (API key)
+```
+
+**Vertex AI mode:**
+```
+🚀 ADK Cloud Run Proxy running on port 3000
+☁️  Cloud Run URL: https://your-agent.run.app
+📦 Default App: MBS
+🔧 Debug mode: OFF
+🤖 AI Suggestions: ENABLED
+✅ AI Suggestions: Initialized with Vertex AI (project: my-project, location: us-central1)
 ```
 
 ## How It Works
@@ -195,7 +238,10 @@ const SuggestionChips = ({ suggestions }) => (
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `ENABLE_AI_SUGGESTIONS` | No | `false` | Enable/disable AI suggestions |
-| `GEMINI_API_KEY` | Yes* | - | Google AI API key (*if suggestions enabled) |
+| `USE_VERTEX_AI` | No | `false` | Use Vertex AI instead of Google AI |
+| `GEMINI_API_KEY` | Conditional* | - | Google AI API key (*required if Google AI mode) |
+| `GOOGLE_CLOUD_PROJECT` | Conditional** | - | GCP project ID (**required if Vertex AI mode) |
+| `GOOGLE_CLOUD_LOCATION` | No | `us-central1` | GCP location for Vertex AI |
 | `DEBUG` | No | `false` | Enable debug logging for suggestions |
 
 ### Model Configuration

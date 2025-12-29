@@ -28,10 +28,25 @@ const DEFAULT_APP_NAME = process.env.DEFAULT_APP_NAME;
 const DEBUG = process.env.DEBUG === 'true';
 const ENABLE_AI_SUGGESTIONS = process.env.ENABLE_AI_SUGGESTIONS === 'true';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const USE_VERTEX_AI = process.env.USE_VERTEX_AI === 'true';
+const GOOGLE_CLOUD_PROJECT = process.env.GOOGLE_CLOUD_PROJECT;
+const GOOGLE_CLOUD_LOCATION = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
 
 // Initialize AI Suggestions if enabled
 if (ENABLE_AI_SUGGESTIONS) {
-  initializeSuggestionService(GEMINI_API_KEY);
+  if (USE_VERTEX_AI) {
+    // Vertex AI mode - uses Application Default Credentials
+    initializeSuggestionService({
+      useVertexAI: true,
+      project: GOOGLE_CLOUD_PROJECT,
+      location: GOOGLE_CLOUD_LOCATION
+    });
+  } else {
+    // Google AI mode - uses API key
+    initializeSuggestionService({
+      apiKey: GEMINI_API_KEY
+    });
+  }
 }
 
 // Cache for the access token

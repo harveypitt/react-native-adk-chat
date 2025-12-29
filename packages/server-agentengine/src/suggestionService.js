@@ -1,27 +1,63 @@
 /**
  * AI Suggestion Generation Service
- * Uses Gemini 3.0 Flash to generate structured diagnostic suggestions
+ * Uses Gemini 1.5 Flash to generate structured diagnostic suggestions
  * with automatic source attribution from tool results
+ *
+ * Supports both Google AI (API key) and Vertex AI (ADC) authentication
  */
 
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI, VertexAI } = require('@google/generative-ai');
 
 // Initialize Gemini client
 let genAI = null;
 let model = null;
+let authMode = null; // 'api-key' or 'vertex-ai'
 
 /**
- * Initialize the suggestion service with an API key
- * @param {string} apiKey - Google AI API key
+ * Initialize the suggestion service
+ * Supports both Google AI (API key) and Vertex AI (ADC) modes
+ *
+ * @param {Object} config - Configuration object
+ * @param {string} config.apiKey - Google AI API key (for Google AI mode)
+ * @param {boolean} config.useVertexAI - Use Vertex AI instead of Google AI
+ * @param {string} config.project - GCP project ID (for Vertex AI mode)
+ * @param {string} config.location - GCP location (for Vertex AI mode, default: us-central1)
+ * @returns {boolean} True if initialization succeeded
  */
-function initializeSuggestionService(apiKey) {
-  if (!apiKey) {
-    console.warn('⚠️  AI Suggestions: No API key provided, suggestions will be disabled');
-    return false;
+function initializeSuggestionService(config) {
+  // Support both old API (string apiKey) and new API (config object)
+  if (typeof config === 'string') {
+    config = { apiKey: config };
   }
 
+  const { apiKey, useVertexAI, project, location = 'us-central1' } = config || {};
+
   try {
-    genAI = new GoogleGenerativeAI(apiKey);
+    if (useVertexAI) {
+      // Vertex AI mode - uses Application Default Credentials
+      if (!project) {
+        console.error('❌ AI Suggestions: Vertex AI mode requires GOOGLE_CLOUD_PROJECT');
+        return false;
+      }
+
+      genAI = new VertexAI({
+        project,
+        location
+      });
+
+      authMode = 'vertex-ai';
+      console.log(`✅ AI Suggestions: Initialized with Vertex AI (project: ${project}, location: ${location})`);
+    } else {
+      // Google AI mode - uses API key
+      if (!apiKey) {
+        console.warn('⚠️  AI Suggestions: No API key provided, suggestions will be disabled');
+        return false;
+      }
+
+      genAI = new GoogleGenerativeAI(apiKey);
+      authMode = 'api-key';
+      console.log('✅ AI Suggestions: Initialized with Google AI (API key)');
+    }
 
     // Use Gemini 1.5 Flash for fast, cost-effective structured output
     model = genAI.getGenerativeModel({
@@ -32,7 +68,6 @@ function initializeSuggestionService(apiKey) {
       },
     });
 
-    console.log('✅ AI Suggestions: Initialized with Gemini 1.5 Flash');
     return true;
   } catch (error) {
     console.error('❌ AI Suggestions: Failed to initialize:', error.message);
@@ -45,6 +80,14 @@ function initializeSuggestionService(apiKey) {
  */
 function isEnabled() {
   return model !== null;
+}
+
+/**
+ * Get current authentication mode
+ * @returns {string|null} 'api-key', 'vertex-ai', or null if not initialized
+ */
+function getAuthMode() {
+  return authMode;
 }
 
 /**
@@ -233,6 +276,7 @@ function isQuestion(text) {
 module.exports = {
   initializeSuggestionService,
   isEnabled,
+  getAuthMode,
   generateSuggestions,
   isQuestion,
   extractToolCalls

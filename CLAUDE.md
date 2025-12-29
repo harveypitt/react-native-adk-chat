@@ -174,14 +174,20 @@ Simpler streaming - directly forwards SSE stream from Agent Engine's `:streamQue
 - `PORT` (default: 3000) - Server port
 - `DEBUG` (default: false) - Enable debug logging
 - `ENABLE_AI_SUGGESTIONS` (default: false) - Enable AI-powered suggestion generation
-- `GEMINI_API_KEY` (required if AI suggestions enabled) - Google AI API key for Gemini
+- `USE_VERTEX_AI` (default: false) - Use Vertex AI instead of Google AI for suggestions
+- `GEMINI_API_KEY` (required if AI suggestions with Google AI) - Google AI API key
+- `GOOGLE_CLOUD_PROJECT` (required if AI suggestions with Vertex AI) - GCP project ID
+- `GOOGLE_CLOUD_LOCATION` (default: us-central1) - GCP location for Vertex AI
 
 **Agent Engine Proxy:**
 - `AGENT_ENGINE_URL` (required) - URL of Agent Engine (legacy var: `REASONING_ENGINE_URL`)
 - `GOOGLE_APPLICATION_CREDENTIALS` (required) - Absolute path to service account key JSON
 - `PORT` (default: 3000) - Server port
 - `ENABLE_AI_SUGGESTIONS` (default: false) - Enable AI-powered suggestion generation
-- `GEMINI_API_KEY` (required if AI suggestions enabled) - Google AI API key for Gemini
+- `USE_VERTEX_AI` (default: false) - Use Vertex AI instead of Google AI for suggestions
+- `GEMINI_API_KEY` (required if AI suggestions with Google AI) - Google AI API key
+- `GOOGLE_CLOUD_PROJECT` (required if AI suggestions with Vertex AI) - GCP project ID
+- `GOOGLE_CLOUD_LOCATION` (default: us-central1) - GCP location for Vertex AI
 
 **Demo App:**
 - `EXPO_PUBLIC_PROXY_BASE_URL` (default: http://localhost:3000) - Proxy URL
@@ -274,9 +280,24 @@ The proxy servers now support AI-powered suggestion generation using Gemini 1.5 
 4. Returns suggestions as SSE events to the client
 
 **Configuration:**
+
+*Option 1: Google AI (API Key - Recommended for Development)*
 ```bash
 export ENABLE_AI_SUGGESTIONS=true
 export GEMINI_API_KEY="your-api-key-here"  # Get from https://aistudio.google.com/app/apikey
+```
+
+*Option 2: Vertex AI (ADC - Recommended for Production)*
+```bash
+export ENABLE_AI_SUGGESTIONS=true
+export USE_VERTEX_AI=true
+export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
+export GOOGLE_CLOUD_LOCATION="us-central1"  # Optional, defaults to us-central1
+
+# Ensure Application Default Credentials are configured:
+gcloud auth application-default login
+# OR set service account key:
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
 ```
 
 **CLI Setup:**
