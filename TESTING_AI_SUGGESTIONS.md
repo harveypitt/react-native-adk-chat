@@ -1,83 +1,37 @@
 # Testing AI-Powered Suggestions
 
-This guide walks you through testing the AI-powered suggestion generation feature end-to-end using the diagnostic agent example.
+This guide shows you how to test AI-powered suggestion generation with any ADK agent.
 
 ## Overview
 
-The AI suggestions feature works by:
-1. Agent calls diagnostic tools and asks follow-up questions
-2. Proxy server detects questions in agent responses
-3. Gemini 1.5 Flash analyzes the question and recent tool results
+**AI suggestions is a proxy-side feature** - it works automatically with any agent that:
+- Asks questions (responses ending with "?")
+- Calls tools that return data
+
+The proxy detects questions, analyzes recent tool results, and uses Gemini to generate contextual suggestions.
+
+### How It Works
+
+1. Your agent calls a tool and asks a follow-up question
+2. Proxy server detects the question in the agent's response
+3. Gemini 1.5 Flash analyzes the question and recent tool call results
 4. Structured suggestions are generated with source citations
 5. Suggestions are sent to the client as SSE events
 6. Demo app displays suggestions as interactive chips
 
+**No agent-side changes required** - just configure the proxy.
+
 ## Prerequisites
 
-- **GCP Project**: You need a Google Cloud project
-- **ADK Installed**: Google ADK CLI tools installed
-- **Gemini API**: Either Google AI API key OR Vertex AI access configured
+- **ADK Agent**: Any deployed agent (Cloud Run or Agent Engine)
+- **Gemini API**: Either Google AI API key OR Vertex AI access
 - **Node.js & pnpm**: For running the proxy and demo app
-- **Python 3.11+**: For deploying the diagnostic agent
 
-## Step 1: Enable Suggestions Testing Mode
+## Quick Start
 
-The example agent has a built-in toggle to enable diagnostic tools that trigger AI suggestions.
+### Step 1: Configure AI Suggestions
 
-### 1.1 Enable the Testing Mode
-
-Edit `example-agent/app/agent.py` and change the flag at the top:
-
-```python
-# Toggle AI-powered suggestions testing mode
-ENABLE_SUGGESTIONS_TESTING = True  # Change from False to True
-```
-
-This will:
-- Add diagnostic tools (`get_equipment_state`, `get_error_logs`) to the agent
-- Update the agent instruction to ask follow-up questions
-- Make the agent return structured JSON data that triggers AI suggestions
-
-### 1.2 Deploy the Agent
-
-Navigate to the example-agent directory and deploy:
-
-```bash
-cd example-agent
-
-# Deploy to Cloud Run
-adk deploy --app agent.py
-```
-
-Or deploy to Agent Engine:
-
-```bash
-adk deploy --app agent.py --engine agent-engine
-```
-
-Save the returned Cloud Run URL for later.
-
-### 1.3 Test the Agent Directly
-
-Verify diagnostic mode is working:
-
-```bash
-# Test with Cloud Run
-curl -X POST "https://your-agent-xyz.run.app/run" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-  -d '{
-    "user_id": "test-user",
-    "session_id": "test-session",
-    "message": "Check the status of pump-1"
-  }'
-```
-
-You should see the agent call `get_equipment_state` and ask a follow-up question like "What would you like to check next?"
-
-## Step 2: Configure AI Suggestions in Proxy
-
-### 2.1 Choose Authentication Mode
+Choose your authentication mode for Gemini:
 
 **Option A: Google AI (Development - Easier Setup)**
 
@@ -100,17 +54,15 @@ export GOOGLE_CLOUD_LOCATION="us-central1"
 gcloud auth application-default login
 ```
 
-### 2.2 Configure Proxy Environment
+### Step 2: Point to Your Agent
 
 From the **root directory** of react-native-adk-chat:
 
-**For Cloud Run Agent:**
+**For Cloud Run agents:**
 
 ```bash
 export CLOUD_RUN_URL="https://your-agent-xyz.run.app"
 export DEFAULT_APP_NAME="app"
-export ENABLE_AI_SUGGESTIONS=true
-export GEMINI_API_KEY="your-api-key"  # Or use Vertex AI config
 ```
 
 **For Agent Engine:**
@@ -118,33 +70,25 @@ export GEMINI_API_KEY="your-api-key"  # Or use Vertex AI config
 ```bash
 export AGENT_ENGINE_URL="https://region-project-agent.a.run.app"
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
-export ENABLE_AI_SUGGESTIONS=true
-export GEMINI_API_KEY="your-api-key"  # Or use Vertex AI config
 ```
 
-## Step 3: Run the Demo App with Proxy
+### Step 3: Run the Demo App
 
-### 3.1 Start Proxy and Demo App Together
-
-From the root directory:
-
-**For Cloud Run:**
+Start the proxy and demo app:
 
 ```bash
+# For Cloud Run agents
 pnpm demo:cloudrun
-```
 
-**For Agent Engine:**
-
-```bash
+# For Agent Engine
 pnpm demo:agentengine
 ```
 
-This will start both:
+This starts both:
 - Proxy server on port 3000 (blue logs: `[PROXY]`)
 - Demo app (magenta logs: `[DEMO_APP]`)
 
-### 3.2 Verify AI Suggestions Are Enabled
+**Verify AI Suggestions Are Enabled**
 
 Look for this in the startup logs:
 
@@ -160,75 +104,45 @@ Or for Vertex AI:
 [PROXY] ✅ AI Suggestions: Initialized with Vertex AI (project: my-project, location: us-central1)
 ```
 
-### 3.3 Open the Demo App
+Open the demo app by pressing `w` (web), `i` (iOS), or `a` (Android).
 
-Press `w` to open the web version in your browser, or:
-- Press `i` for iOS simulator
-- Press `a` for Android emulator
+## Testing with Your Agent
 
-## Step 4: Test the Feature
+The feature works automatically - just have your agent:
+1. **Call tools** that return data
+2. **Ask questions** based on tool results
 
-### 4.1 Example Interaction Flow
+**Example Flow:**
 
-**Scenario 1: Equipment State Check**
+1. **User**: "What's the weather in SF?"
+2. **Agent** (calls `get_weather` tool): "It's 60°F and foggy. Would you like to know the forecast?"
+3. **AI Suggestions appear**: `[Yes, show forecast]` `[No thanks]` `[Check another city]`
 
-1. **User sends**: "Check the status of pump-1"
+### What Makes Good Suggestions?
 
-2. **Agent response**:
-   - Calls `get_equipment_state` tool
-   - Returns equipment data (e.g., status: "maintenance", state: "maintenance_mode")
-   - Asks: "What is the current state of pump-1?"
+**Best results when your agent:**
+- Asks specific questions after calling tools
+- Returns structured data (JSON) from tools
+- References tool data in questions (e.g., "The temperature is 78°C. Is this normal?")
 
-3. **AI Suggestions appear** as chips:
-   ```
-   [Equipment is in maintenance mode] [Scheduled maintenance] [View error logs]
-   ```
-   Each suggestion includes confidence level and source attribution
+**Question types detected:**
+- Yes/No: "Would you like to check more?"
+- Choice: "Which option: A, B, or C?"
+- State: "What is the current status?"
+- Numeric: "How many errors occurred?"
 
-4. **User clicks**: "Equipment is in maintenance mode"
-
-5. **Agent continues** the diagnostic conversation
-
-**Scenario 2: Error Log Investigation**
-
-1. **User sends**: "Are there any errors for motor-2?"
-
-2. **Agent response**:
-   - Calls `get_error_logs` tool
-   - Returns error data (e.g., 3 errors found: E503, W201, E404)
-   - Asks: "Which error would you like to investigate first?"
-
-3. **AI Suggestions appear**:
-   ```
-   [E503 - Motor overheating] [W201 - Temperature warning] [E404 - Sensor timeout]
-   ```
-
-4. **User clicks** a suggestion to continue
-
-**Scenario 3: System Health Overview**
-
-1. **User sends**: "What's the overall system status?"
-
-2. **Agent response**:
-   - Calls `get_system_health` tool
-   - Returns system data (overall_status: "degraded", equipment_error: 1)
-   - Asks: "The system status is degraded. Would you like to check individual equipment?"
-
-3. **AI Suggestions appear**:
-   ```
-   [Yes, check equipment] [Show maintenance schedule] [View all alerts]
-   ```
-
-### 4.2 Expected UI Behavior
+### Expected UI Behavior
 
 - **Suggestion chips appear** below agent messages that end with "?"
 - **Chips are styled** with the ButtonGroup component
 - **Confidence indicators** (if you add visual styling based on confidence level)
 - **Source attribution** (visible in debug mode or tooltips)
-- **Reasoning text** appears below chips: "💡 Based on equipment diagnostics..."
+- **Reasoning text** appears below chips: "💡 Based on..."
 - **Clicking a chip** auto-sends the suggestion value as user message
 
-### 4.3 Verify in Debug Logs
+## Debugging
+
+### Enable Debug Mode
 
 **Proxy logs:**
 ```
@@ -241,22 +155,18 @@ Press `w` to open the web version in your browser, or:
 App: Received suggestions: 3 options
 ```
 
-## Step 5: Debugging
-
-### 5.1 Enable Debug Mode
-
 ```bash
 export DEBUG=true
 pnpm demo:cloudrun
 ```
 
-This shows detailed logs:
+Shows:
 - Question detection
 - Tool call extraction
 - Gemini API requests/responses
 - Suggestion generation results
 
-### 5.2 Common Issues
+### Common Issues
 
 **Issue: No suggestions appearing**
 
@@ -288,23 +198,21 @@ echo $GEMINI_API_KEY
 **Issue: Suggestions not grounded in tool data**
 
 ✅ **Check**:
-- Verify tools are returning structured JSON
-- Check conversation history is being tracked
-- Enable DEBUG mode to see what data Gemini receives
+- Verify tools return structured data (JSON recommended)
+- Enable DEBUG mode to see what Gemini receives
+- Ensure agent asks questions that reference tool results
 
 **Issue: Agent not asking questions**
 
-✅ **Agent instruction fix**:
-The diagnostic agent is pre-configured to ask questions. If using a different agent, update its instruction to include:
+✅ **Update agent instruction**:
 ```python
 instruction="""
-...
 After calling tools, ask specific follow-up questions based on the data.
 Frame questions to help users make decisions.
 """
 ```
 
-### 5.3 Test Without Mobile App
+### Test Without Mobile App
 
 You can test the proxy directly with curl:
 
@@ -344,146 +252,25 @@ Look for SSE events with `"type": "suggestions"`:
 }
 ```
 
-## Step 6: Advanced Testing
-
-### 6.1 Test Different Question Types
-
-The system detects these question types:
-
-**Yes/No Questions:**
-```
-Agent: "Is the equipment running normally?"
-Expected: [Yes] [No] [Check error logs]
-```
-
-**Choice Questions:**
-```
-Agent: "Which equipment should I check: pump-1, motor-2, or compressor-1?"
-Expected: [pump-1] [motor-2] [compressor-1]
-```
-
-**State Questions:**
-```
-Agent: "What is the current state?"
-Expected: [normal_operation] [maintenance_mode] [fault]
-```
-
-**Numeric Questions:**
-```
-Agent: "How many errors occurred?"
-Expected: [0 errors] [3 errors] [View logs]
-```
-
-### 6.2 Test with Complex Tool Results
-
-Modify the diagnostic agent tools to return more complex data:
-
-```python
-def get_detailed_diagnostics(equipment_id: str) -> str:
-    """Returns very detailed diagnostic data to test suggestion extraction."""
-    return json.dumps({
-        "equipment_id": equipment_id,
-        "sensors": {
-            "temperature": {"value": 78.5, "unit": "celsius", "status": "warning"},
-            "pressure": {"value": 135.0, "unit": "psi", "status": "elevated"},
-            "vibration": {"value": 2.3, "unit": "mm/s", "status": "normal"}
-        },
-        "recent_events": [
-            {"time": "2025-12-29T10:15:00Z", "event": "temperature_spike"},
-            {"time": "2025-12-29T09:30:00Z", "event": "pressure_increase"}
-        ],
-        "recommendations": [
-            "Check cooling system",
-            "Inspect pressure relief valve",
-            "Monitor for next 2 hours"
-        ]
-    })
-```
-
-Verify suggestions reference nested fields like `sensors.temperature.value`.
-
-### 6.3 Test Source Attribution
-
-Enable detailed source display in the demo app to verify citations:
-
-```tsx
-{item.suggestions.suggestions.map((sug, idx) => (
-  <View key={idx}>
-    <Button title={sug.text} onPress={() => handleSuggestionPress(sug.value)} />
-    {sug.source && (
-      <Text style={styles.sourceText}>
-        From: {sug.source.tool}.{sug.source.field}
-      </Text>
-    )}
-  </View>
-))}
-```
-
-### 6.4 Performance Testing
-
-Monitor suggestion generation latency:
-
-```bash
-# Time how long suggestions take
-time curl -X POST http://localhost:3000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "test", "session_id": "test", "message": "Check pump-1"}'
-```
-
-Expected latency: 1-2 seconds for suggestion generation (non-blocking)
-
-## Step 7: Cleanup
-
-After testing:
-
-```bash
-# Stop the demo app (Ctrl+C in terminal)
-
-# Optional: Delete the deployed agent
-gcloud run services delete your-diagnostic-agent --region=us-central1
-
-# Optional: Disable AI suggestions
-unset ENABLE_AI_SUGGESTIONS
-unset GEMINI_API_KEY
-```
-
-## Verification Checklist
-
-- [ ] Diagnostic agent deployed successfully
-- [ ] Proxy shows "AI Suggestions: ENABLED" on startup
-- [ ] Demo app loads without errors
-- [ ] Agent asks questions after calling tools
-- [ ] Suggestion chips appear below agent questions
-- [ ] Chips contain relevant suggestions from tool data
-- [ ] Clicking chips auto-sends the suggestion
-- [ ] Reasoning text appears below chips
-- [ ] Source attribution is included in suggestions
-- [ ] Multiple suggestion types work (yes/no, choice, state)
-- [ ] Suggestions are grounded in actual tool results
-
-## Next Steps
-
-After successful testing:
-
-1. **Deploy to Production**: Use Vertex AI mode for enterprise auth
-2. **Customize Agent**: Modify diagnostic_agent.py for your use case
-3. **Add More Tools**: Create domain-specific diagnostic tools
-4. **Enhance UI**: Style suggestion chips with confidence indicators
-5. **Add Analytics**: Track which suggestions users select
-6. **Improve Prompts**: Customize Gemini prompts for your domain
-
 ## Quick Start Summary
 
-1. **Enable testing mode**: Set `ENABLE_SUGGESTIONS_TESTING = True` in `example-agent/app/agent.py`
-2. **Deploy agent**: `cd example-agent && adk deploy --app agent.py`
-3. **Configure proxy**: Export `ENABLE_AI_SUGGESTIONS=true` and `GEMINI_API_KEY=your-key`
-4. **Run demo**: `pnpm demo:cloudrun` from repo root
-5. **Test**: Send "Check pump-1 status" and watch suggestions appear
+1. **Configure proxy**: `export ENABLE_AI_SUGGESTIONS=true GEMINI_API_KEY=your-key`
+2. **Point to agent**: `export CLOUD_RUN_URL=https://your-agent.run.app`
+3. **Run demo**: `pnpm demo:cloudrun`
+4. **Test**: Have your agent ask a question and watch suggestions appear
+
+## Works With Any Agent
+
+- ✅ Custom domain agents (diagnostics, customer support, data analysis)
+- ✅ Agents with any tools that return data
+- ✅ Multi-turn conversational agents
+- ✅ Cloud Run or Agent Engine deployments
+
+**No agent-side changes needed** - just configure the proxy.
 
 ## Reference
 
-- **AI Suggestions Docs**: See `AI_SUGGESTIONS.md` for detailed feature documentation
-- **Agent Code**: `example-agent/app/agent.py` (see `ENABLE_SUGGESTIONS_TESTING` flag)
+- **AI Suggestions Docs**: `AI_SUGGESTIONS.md` for detailed feature documentation
 - **Proxy Implementation**: `packages/server-*/src/suggestionService.js`
 - **Client Integration**: `example/demo-app/App.tsx`
 
