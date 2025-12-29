@@ -325,12 +325,12 @@ export class ProxyClient {
   /**
    * Send a chat message with streaming support
    * @param request - Chat request parameters
-   * @param onEvent - Callback function for each streamed event (text, functionCall, functionResponse)
+   * @param onEvent - Callback function for each streamed event (text, functionCall, functionResponse, suggestions)
    * @returns Promise<string> - The complete response text
    */
   async sendMessage(
     request: ChatRequest,
-    onEvent?: (chunk: string, invocationId: string, type: 'text' | 'functionCall' | 'functionResponse', eventData: any) => void,
+    onEvent?: (chunk: string, invocationId: string, type: 'text' | 'functionCall' | 'functionResponse' | 'suggestions', eventData: any) => void,
   ): Promise<string> {
     try {
       // Add default app_name if configured and not provided in request
@@ -416,11 +416,15 @@ export class ProxyClient {
           const invocationId = data.invocationId || 'default';
 
           // Determine event type and extract data
-          let eventType: 'text' | 'functionCall' | 'functionResponse' | 'other' = 'other';
+          let eventType: 'text' | 'functionCall' | 'functionResponse' | 'suggestions' | 'other' = 'other';
           let eventData: any = data;
           let textChunk = "";
 
-          if (data.content && Array.isArray(data.content.parts)) {
+          // Check for suggestions event first (has type: 'suggestions')
+          if (data.type === 'suggestions' && data.content && data.content.suggestions) {
+            eventType = 'suggestions';
+            eventData = data;
+          } else if (data.content && Array.isArray(data.content.parts)) {
             for (const part of data.content.parts) {
               if (part.text) {
                 textChunk += part.text;
@@ -469,11 +473,15 @@ export class ProxyClient {
           try {
             const data = JSON.parse(jsonStr);
             const invocationId = data.invocationId || 'default';
-            let eventType: 'text' | 'functionCall' | 'functionResponse' | 'other' = 'other';
+            let eventType: 'text' | 'functionCall' | 'functionResponse' | 'suggestions' | 'other' = 'other';
             let eventData: any = data;
             let textChunk = "";
 
-            if (data.content && Array.isArray(data.content.parts)) {
+            // Check for suggestions event first
+            if (data.type === 'suggestions' && data.content && data.content.suggestions) {
+              eventType = 'suggestions';
+              eventData = data;
+            } else if (data.content && Array.isArray(data.content.parts)) {
               for (const part of data.content.parts) {
                 if (part.text) {
                   textChunk += part.text;

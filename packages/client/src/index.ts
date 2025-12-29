@@ -23,6 +23,8 @@ export type {
   CreateSessionRequest,
   SessionData,
   ButtonOption,
+  Suggestion,
+  SuggestionContent,
   MessagePart,
 } from "./api/types";
 

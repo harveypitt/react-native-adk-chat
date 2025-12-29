@@ -17,7 +17,10 @@ import {
   ProxyClient,
   type Message,
   type ToolCall,
+  type Suggestion,
+  type SuggestionContent,
   ToolResponseDebugScreen,
+  ButtonGroup,
 } from "../../packages/client/src";
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -185,12 +188,14 @@ function ChatScreen({ navigation }: { navigation: any }) {
           session_id: sessionId,
           message: userMessage.content,
         },
-        (chunk: string, invocationId: string, type: 'text' | 'functionCall' | 'functionResponse', eventData: any) => {
+        (chunk: string, invocationId: string, type: 'text' | 'functionCall' | 'functionResponse' | 'suggestions', eventData: any) => {
           // Debug logging
           if (type === 'functionCall') {
             console.log('App: Received functionCall:', eventData.functionCall.name);
           } else if (type === 'functionResponse') {
             console.log('App: Received functionResponse for:', eventData.functionResponse.name);
+          } else if (type === 'suggestions') {
+            console.log('App: Received suggestions:', eventData.content.suggestions.length, 'options');
           }
 
           // Update the AI message with each chunk
@@ -218,6 +223,10 @@ function ChatScreen({ navigation }: { navigation: any }) {
                   const updatedToolCalls = Array.from(currentToolCalls.values());
                   console.log('App: Updating message with tool calls (response):', updatedToolCalls);
                   return { ...msg, toolCalls: updatedToolCalls };
+                } else if (type === 'suggestions') {
+                  // Add suggestions to the message
+                  const suggestionsContent: SuggestionContent = eventData.content;
+                  return { ...msg, suggestions: suggestionsContent };
                 }
               }
               return msg;
@@ -256,11 +265,39 @@ function ChatScreen({ navigation }: { navigation: any }) {
     navigation.navigate('ToolResponseDebug', { toolCall });
   };
 
+  const handleSuggestionPress = async (value: string) => {
+    // Send the selected suggestion value as a new message
+    setInput(value);
+    // Trigger send immediately
+    setTimeout(() => handleSend(), 100);
+  };
+
   const renderMessage = ({ item }: { item: Message }) => (
-    <MessageBubble
-      message={item}
-      onToolCallPress={handleToolCallPress}
-    />
+    <View>
+      <MessageBubble
+        message={item}
+        onToolCallPress={handleToolCallPress}
+      />
+      {item.suggestions && item.suggestions.suggestions.length > 0 && (
+        <View style={styles.suggestionsContainer}>
+          <ButtonGroup
+            options={item.suggestions.suggestions.map((sug, idx) => ({
+              id: `${item.id}-sug-${idx}`,
+              label: sug.text,
+              value: sug.value,
+            }))}
+            onPress={handleSuggestionPress}
+            disabled={isLoading}
+            containerStyle={styles.suggestionButtons}
+          />
+          {item.suggestions.reasoning && (
+            <Text style={styles.suggestionReasoning}>
+              💡 {item.suggestions.reasoning}
+            </Text>
+          )}
+        </View>
+      )}
+    </View>
   );
 
   return (
@@ -460,5 +497,19 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "600",
+  },
+  suggestionsContainer: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  suggestionButtons: {
+    marginLeft: 0,
+  },
+  suggestionReasoning: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontStyle: "italic",
+    marginTop: 8,
+    marginLeft: 4,
   },
 });

@@ -9,6 +9,22 @@ export interface ButtonOption {
   value: string;
 }
 
+export interface Suggestion {
+  text: string;
+  value: string;
+  confidence?: 'high' | 'medium' | 'low';
+  source?: {
+    tool: string;
+    field: string;
+  };
+}
+
+export interface SuggestionContent {
+  suggestions: Suggestion[];
+  reasoning?: string;
+  questionType?: string;
+}
+
 export interface MessagePart {
   type: 'text' | 'buttons' | 'image' | 'citation';
   content?: string;
@@ -32,12 +48,13 @@ export interface ToolCall {
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   parts?: MessagePart[];
   timestamp: Date;
   isLoading?: boolean;
   toolCalls?: ToolCall[];
+  suggestions?: SuggestionContent;
 }
 
 // ADK API Request Types
