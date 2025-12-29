@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Animated, TouchableOpacity, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import Markdown from "react-native-markdown-display";
 import { ButtonGroup } from "./ButtonGroup";
 import type { MessagePart } from "../api/types";
 
@@ -167,14 +168,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         {message.isLoading && !message.content ? (
           <LoadingIndicator />
         ) : (
-          <Text
-            style={[
-              styles.messageText,
-              isUser ? styles.userMessageText : styles.aiMessageText,
-            ]}
+          <Markdown
+            style={isUser ? userMarkdownStyles : aiMarkdownStyles}
           >
             {message.content}
-          </Text>
+          </Markdown>
         )}
         {/* Render message parts (buttons, images, etc.) */}
         {message.parts?.map((part, index) => {
@@ -336,6 +334,182 @@ const styles = StyleSheet.create({
   },
   toolCallTextCalling: {
     color: colors.greyedOutText,
+  },
+});
+
+// Markdown styles for user messages
+const userMarkdownStyles = StyleSheet.create({
+  body: {
+    fontSize: typography.messageSize,
+    lineHeight: typography.messageLineHeight,
+    fontWeight: "400",
+    color: colors.userMessageText,
+  },
+  paragraph: {
+    marginTop: 0,
+    marginBottom: 0,
+  },
+  heading1: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.userMessageText,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  heading2: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: colors.userMessageText,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  heading3: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: colors.userMessageText,
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  code_inline: {
+    backgroundColor: "#E5E7EB",
+    color: colors.userMessageText,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontFamily: Platform.select({ ios: "Courier", android: "monospace", default: "monospace" }),
+  },
+  code_block: {
+    backgroundColor: "#E5E7EB",
+    color: colors.userMessageText,
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    fontFamily: Platform.select({ ios: "Courier", android: "monospace", default: "monospace" }),
+  },
+  fence: {
+    backgroundColor: "#E5E7EB",
+    color: colors.userMessageText,
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    fontFamily: Platform.select({ ios: "Courier", android: "monospace", default: "monospace" }),
+  },
+  bullet_list: {
+    marginVertical: 4,
+  },
+  ordered_list: {
+    marginVertical: 4,
+  },
+  list_item: {
+    marginVertical: 2,
+  },
+  strong: {
+    fontWeight: "700",
+    color: colors.userMessageText,
+  },
+  em: {
+    fontStyle: "italic",
+    color: colors.userMessageText,
+  },
+  link: {
+    color: "#2563EB",
+    textDecorationLine: "underline",
+  },
+  blockquote: {
+    backgroundColor: "#E5E7EB",
+    borderLeftColor: colors.textSecondary,
+    borderLeftWidth: 4,
+    paddingLeft: 12,
+    paddingVertical: 8,
+    marginVertical: 8,
+  },
+});
+
+// Markdown styles for AI messages
+const aiMarkdownStyles = StyleSheet.create({
+  body: {
+    fontSize: typography.messageSize,
+    lineHeight: typography.messageLineHeight,
+    fontWeight: "400",
+    color: colors.aiMessageText,
+  },
+  paragraph: {
+    marginTop: 0,
+    marginBottom: 0,
+  },
+  heading1: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.aiMessageText,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  heading2: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: colors.aiMessageText,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  heading3: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: colors.aiMessageText,
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  code_inline: {
+    backgroundColor: colors.userMessageBg,
+    color: colors.aiMessageText,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontFamily: Platform.select({ ios: "Courier", android: "monospace", default: "monospace" }),
+  },
+  code_block: {
+    backgroundColor: colors.userMessageBg,
+    color: colors.aiMessageText,
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    fontFamily: Platform.select({ ios: "Courier", android: "monospace", default: "monospace" }),
+  },
+  fence: {
+    backgroundColor: colors.userMessageBg,
+    color: colors.aiMessageText,
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    fontFamily: Platform.select({ ios: "Courier", android: "monospace", default: "monospace" }),
+  },
+  bullet_list: {
+    marginVertical: 4,
+  },
+  ordered_list: {
+    marginVertical: 4,
+  },
+  list_item: {
+    marginVertical: 2,
+  },
+  strong: {
+    fontWeight: "700",
+    color: colors.aiMessageText,
+  },
+  em: {
+    fontStyle: "italic",
+    color: colors.aiMessageText,
+  },
+  link: {
+    color: "#2563EB",
+    textDecorationLine: "underline",
+  },
+  blockquote: {
+    backgroundColor: colors.userMessageBg,
+    borderLeftColor: colors.textSecondary,
+    borderLeftWidth: 4,
+    paddingLeft: 12,
+    paddingVertical: 8,
+    marginVertical: 8,
   },
 });
 
