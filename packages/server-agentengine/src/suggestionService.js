@@ -1,12 +1,13 @@
 /**
  * AI Suggestion Generation Service
- * Uses Gemini 1.5 Flash to generate structured diagnostic suggestions
+ * Uses Gemini 3 Flash Preview to generate structured diagnostic suggestions
  * with automatic source attribution from tool results
  *
  * Supports both Google AI (API key) and Vertex AI (ADC) authentication
  */
 
-const { GoogleGenerativeAI, VertexAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { VertexAI } = require('@google-cloud/vertexai');
 
 // Initialize Gemini client
 let genAI = null;
@@ -22,6 +23,7 @@ let authMode = null; // 'api-key' or 'vertex-ai'
  * @param {boolean} config.useVertexAI - Use Vertex AI instead of Google AI
  * @param {string} config.project - GCP project ID (for Vertex AI mode)
  * @param {string} config.location - GCP location (for Vertex AI mode, default: us-central1)
+ * @param {string} config.model - Gemini model to use (default: gemini-3-flash-preview)
  * @returns {boolean} True if initialization succeeded
  */
 function initializeSuggestionService(config) {
@@ -30,7 +32,7 @@ function initializeSuggestionService(config) {
     config = { apiKey: config };
   }
 
-  const { apiKey, useVertexAI, project, location = 'us-central1' } = config || {};
+  const { apiKey, useVertexAI, project, location = 'us-central1', model: modelName = 'gemini-3-flash-preview' } = config || {};
 
   try {
     if (useVertexAI) {
@@ -59,14 +61,16 @@ function initializeSuggestionService(config) {
       console.log('✅ AI Suggestions: Initialized with Google AI (API key)');
     }
 
-    // Use Gemini 1.5 Flash for fast, cost-effective structured output
+    // Use Gemini 3 Flash Preview for fast, cost-effective structured output
+    // Note: Schema will be set per-request in generateSuggestions
     model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: modelName,
       generationConfig: {
-        responseMimeType: 'application/json',
         temperature: 0.7,
       },
     });
+
+    console.log(`   Using model: ${modelName}`);
 
     return true;
   } catch (error) {
@@ -192,27 +196,52 @@ async function generateSuggestions(agentQuestion, conversationHistory = [], opti
     };
 
     // Construct the prompt
-    const prompt = `You are a diagnostic assistant helping users troubleshoot technical issues.
+    const prompt = `You are a helpful assistant generating follow-up action suggestions for users.
 
-The AI agent has asked the user: "${agentQuestion}"
+The AI agent's last message was: "${agentQuestion}"
 ${contextText}
 
-Based on the agent's question and the available diagnostic data from tool calls, generate 3-5 helpful suggestion options that:
-1. Are specific and actionable (not generic)
+Based on the agent's message and context, generate 3-5 helpful suggestion options that represent natural next steps or responses the user might want to take:
+1. Are specific and actionable (not generic like "tell me more")
 2. Are grounded in the diagnostic data when available
 3. Include proper citations to the tool/field that supports each suggestion
 4. Are ordered by relevance/confidence
 
-For equipment state questions, suggest actual state values found in the diagnostic data.
-For yes/no questions, provide clear options with supporting evidence.
-For technical questions, provide options based on common diagnostic patterns.
+For each suggestion:
+- "text" should be a short, user-friendly display label (2-6 words)
+- "value" should be the FULL TEXT MESSAGE that will be sent when the user clicks this option (complete sentence or answer)
 
-Return your response as a JSON object matching the schema provided.`;
+Examples:
+- If agent asks a question: text="Yes", value="Yes, that's correct"
+- If agent provides info: text="Tell me more", value="Can you tell me more about this?"
+- For equipment diagnostics: text="Check power supply", value="I want to check the power supply connection"
+- For status updates: text="What's next?", value="What should I do next?"
 
-    // Generate suggestions using function calling
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+IMPORTANT: The "value" field must ALWAYS be the complete text message to send, NOT a number or ID.
+
+Return your response as a JSON object with suggestions and reasoning.`;
+
+    // Generate suggestions with structured output
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+      },
+    });
+
+    // Handle response - different structure for Google AI vs Vertex AI
+    let text;
+    if (typeof result.response?.text === 'function') {
+      // Google AI SDK - response.text() is a function
+      const response = await result.response;
+      text = response.text();
+    } else if (result.response?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      // Vertex AI SDK - direct property access
+      text = result.response.candidates[0].content.parts[0].text;
+    } else {
+      throw new Error('Unable to extract text from model response');
+    }
 
     // Parse JSON response
     const suggestions = JSON.parse(text);
@@ -278,6 +307,5 @@ module.exports = {
   isEnabled,
   getAuthMode,
   generateSuggestions,
-  isQuestion,
   extractToolCalls
 };

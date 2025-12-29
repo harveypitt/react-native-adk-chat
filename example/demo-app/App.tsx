@@ -266,10 +266,94 @@ function ChatScreen({ navigation }: { navigation: any }) {
   };
 
   const handleSuggestionSelect = async (suggestion: Suggestion) => {
-    // Send the selected suggestion value as a new message
-    setInput(suggestion.value);
-    // Trigger send immediately
-    setTimeout(() => handleSend(), 100);
+    // Don't allow sending if already loading
+    if (isLoading || !sessionId) return;
+
+    // Create user message with the suggestion value
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: suggestion.value,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setIsLoading(true);
+
+    // Create a placeholder message for the AI response
+    const aiMessageId = (Date.now() + 1).toString();
+    const aiMessage: Message = {
+      id: aiMessageId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+      isLoading: true,
+      toolCalls: [],
+    };
+
+    setMessages((prev) => [...prev, aiMessage]);
+
+    try {
+      let accumulatedText = "";
+      const currentToolCalls = new Map<string, ToolCall>();
+
+      await proxyClient.sendMessage(
+        {
+          user_id: DEFAULT_USER_ID,
+          session_id: sessionId,
+          message: userMessage.content,
+        },
+        (chunk: string, invocationId: string, type: 'text' | 'functionCall' | 'functionResponse' | 'suggestions', eventData: any) => {
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id === aiMessageId) {
+                if (type === 'text') {
+                  accumulatedText += chunk;
+                  return { ...msg, content: accumulatedText, isLoading: false };
+                } else if (type === 'functionCall') {
+                  const { id, name, args } = eventData.functionCall;
+                  const newToolCall: ToolCall = { id, name, args, status: 'calling' };
+                  currentToolCalls.set(id, newToolCall);
+                  const updatedToolCalls = Array.from(currentToolCalls.values());
+                  return { ...msg, toolCalls: updatedToolCalls };
+                } else if (type === 'functionResponse') {
+                  const { id, name, response } = eventData.functionResponse;
+                  const existingToolCall = currentToolCalls.get(id);
+                  if (existingToolCall) {
+                    existingToolCall.status = 'complete';
+                    existingToolCall.response = response;
+                    currentToolCalls.set(id, existingToolCall);
+                  }
+                  const updatedToolCalls = Array.from(currentToolCalls.values());
+                  return { ...msg, toolCalls: updatedToolCalls };
+                } else if (type === 'suggestions') {
+                  const suggestionsContent: SuggestionContent = eventData.content;
+                  return { ...msg, suggestions: suggestionsContent };
+                }
+              }
+              return msg;
+            })
+          );
+        }
+      );
+
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      setIsLoading(false);
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === aiMessageId
+            ? {
+                ...msg,
+                content: "Sorry, I encountered an error. Please try again.",
+                isLoading: false,
+              }
+            : msg
+        )
+      );
+    }
   };
 
   const renderMessage = ({ item }: { item: Message }) => (
@@ -283,7 +367,7 @@ function ChatScreen({ navigation }: { navigation: any }) {
           suggestionContent={item.suggestions}
           onSelect={handleSuggestionSelect}
           disabled={isLoading}
-          showReasoning={true}
+          showReasoning={false}
           showConfidence={false}
           animated={true}
         />

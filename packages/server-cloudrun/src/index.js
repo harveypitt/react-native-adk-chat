@@ -4,7 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const { exec } = require('child_process');
 const { promisify } = require('util');
-const { initializeSuggestionService, isEnabled: isSuggestionsEnabled, generateSuggestions, isQuestion } = require('./suggestionService');
+const { initializeSuggestionService, isEnabled: isSuggestionsEnabled, generateSuggestions } = require('./suggestionService');
 
 const execAsync = promisify(exec);
 
@@ -31,6 +31,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const USE_VERTEX_AI = process.env.USE_VERTEX_AI === 'true';
 const GOOGLE_CLOUD_PROJECT = process.env.GOOGLE_CLOUD_PROJECT;
 const GOOGLE_CLOUD_LOCATION = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
 
 // Initialize AI Suggestions if enabled
 if (ENABLE_AI_SUGGESTIONS) {
@@ -39,12 +40,14 @@ if (ENABLE_AI_SUGGESTIONS) {
     initializeSuggestionService({
       useVertexAI: true,
       project: GOOGLE_CLOUD_PROJECT,
-      location: GOOGLE_CLOUD_LOCATION
+      location: GOOGLE_CLOUD_LOCATION,
+      model: GEMINI_MODEL
     });
   } else {
     // Google AI mode - uses API key
     initializeSuggestionService({
-      apiKey: GEMINI_API_KEY
+      apiKey: GEMINI_API_KEY,
+      model: GEMINI_MODEL
     });
   }
 }
@@ -524,12 +527,12 @@ app.post('/chat', async (req, res) => {
               conversationHistory.push(data);
 
             } else {
-              // Final event (not partial) - this is where we check for questions and generate suggestions
+              // Final event (not partial) - generate suggestions for every agent response
               const finalText = allSentText;
 
-              // Check if AI suggestions are enabled and this is a question
-              if (isSuggestionsEnabled() && isQuestion(finalText)) {
-                if (DEBUG) console.log('Detected question, generating AI suggestions:', finalText.substring(0, 50) + '...');
+              // Generate AI suggestions if enabled
+              if (isSuggestionsEnabled() && finalText) {
+                console.log('🔍 Generating AI suggestions for response:', finalText.substring(0, 100) + '...');
 
                 try {
                   // Generate suggestions asynchronously
@@ -550,11 +553,13 @@ app.post('/chat', async (req, res) => {
                       timestamp: new Date()
                     };
 
-                    if (DEBUG) console.log(`Generated ${suggestions.suggestions.length} AI suggestions`);
+                    console.log(`✅ Generated ${suggestions.suggestions.length} AI suggestions`);
                     res.write(`data: ${JSON.stringify(suggestionsEvent)}\n\n`);
+                  } else {
+                    console.log('⚠️ No suggestions returned from AI');
                   }
                 } catch (suggestionError) {
-                  console.error('Failed to generate suggestions:', suggestionError);
+                  console.error('❌ Failed to generate suggestions:', suggestionError.message);
                   // Don't fail the stream, just log the error
                 }
               }

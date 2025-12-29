@@ -3,7 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { GoogleAuth } = require('google-auth-library');
-const { initializeSuggestionService, isEnabled: isSuggestionsEnabled, generateSuggestions, isQuestion } = require('./suggestionService');
+const { initializeSuggestionService, isEnabled: isSuggestionsEnabled, generateSuggestions } = require('./suggestionService');
 
 const app = express();
 
@@ -32,6 +32,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const USE_VERTEX_AI = process.env.USE_VERTEX_AI === 'true';
 const GOOGLE_CLOUD_PROJECT = process.env.GOOGLE_CLOUD_PROJECT;
 const GOOGLE_CLOUD_LOCATION = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
 
 // Initialize AI Suggestions if enabled
 if (ENABLE_AI_SUGGESTIONS) {
@@ -40,12 +41,14 @@ if (ENABLE_AI_SUGGESTIONS) {
     initializeSuggestionService({
       useVertexAI: true,
       project: GOOGLE_CLOUD_PROJECT,
-      location: GOOGLE_CLOUD_LOCATION
+      location: GOOGLE_CLOUD_LOCATION,
+      model: GEMINI_MODEL
     });
   } else {
     // Google AI mode - uses API key
     initializeSuggestionService({
-      apiKey: GEMINI_API_KEY
+      apiKey: GEMINI_API_KEY,
+      model: GEMINI_MODEL
     });
   }
 }
@@ -250,9 +253,9 @@ app.post('/chat', async (req, res) => {
         if (done) {
           console.log('Stream completed');
 
-          // After stream completes, check if we should generate suggestions
-          if (isSuggestionsEnabled() && isQuestion(currentMessageText)) {
-            console.log('Stream ended with question, generating AI suggestions...');
+          // After stream completes, generate suggestions for every response
+          if (isSuggestionsEnabled() && currentMessageText) {
+            console.log('🔍 Generating AI suggestions for response:', currentMessageText.substring(0, 100) + '...');
             try {
               const suggestions = await generateSuggestions(currentMessageText, conversationHistory);
 
@@ -269,11 +272,13 @@ app.post('/chat', async (req, res) => {
                   timestamp: new Date()
                 };
 
-                console.log(`Generated ${suggestions.suggestions.length} AI suggestions`);
+                console.log(`✅ Generated ${suggestions.suggestions.length} AI suggestions`);
                 res.write(`data: ${JSON.stringify(suggestionsEvent)}\n\n`);
+              } else {
+                console.log('⚠️ No suggestions returned from AI');
               }
             } catch (suggestionError) {
-              console.error('Failed to generate suggestions:', suggestionError);
+              console.error('❌ Failed to generate suggestions:', suggestionError.message);
             }
           }
 
