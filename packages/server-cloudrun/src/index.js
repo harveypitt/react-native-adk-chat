@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { initializeSuggestionService, isEnabled: isSuggestionsEnabled, generateSuggestions, isQuestion } = require('./suggestionService');
 
 const execAsync = promisify(exec);
 
@@ -25,6 +26,13 @@ app.use(express.json());
 const CLOUD_RUN_URL = process.env.CLOUD_RUN_URL;
 const DEFAULT_APP_NAME = process.env.DEFAULT_APP_NAME;
 const DEBUG = process.env.DEBUG === 'true';
+const ENABLE_AI_SUGGESTIONS = process.env.ENABLE_AI_SUGGESTIONS === 'true';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// Initialize AI Suggestions if enabled
+if (ENABLE_AI_SUGGESTIONS) {
+  initializeSuggestionService(GEMINI_API_KEY);
+}
 
 // Cache for the access token
 let tokenCache = {
@@ -289,6 +297,9 @@ app.post('/chat', async (req, res) => {
     // Map to track tool calls for this session. Key is functionCall.id
     const toolCallsMap = new Map();
 
+    // Track conversation history for AI suggestions
+    const conversationHistory = [];
+
     // Build the request body for Cloud Run
     const requestBody = {
       app_name: appName,
@@ -430,6 +441,10 @@ app.post('/chat', async (req, res) => {
                 toolCalls: [clientToolCall], // Send the initial tool call status
                 timestamp: new Date()
             };
+
+            // Track in conversation history
+            conversationHistory.push(data);
+
             if (DEBUG) console.log('Forwarding function call:', clientToolCall.name);
             res.write(`data: ${JSON.stringify(toolCallEvent)}\n\n`);
 
@@ -454,6 +469,10 @@ app.post('/chat', async (req, res) => {
                   toolCalls: [existingToolCall], // Send the updated tool call
                   timestamp: new Date()
               };
+
+              // Track in conversation history
+              conversationHistory.push(data);
+
               if (DEBUG) console.log('Forwarding function response:', existingToolCall.name);
               res.write(`data: ${JSON.stringify(toolResponseEvent)}\n\n`);
               toolCallsMap.delete(id); // Clean up the map
@@ -485,8 +504,46 @@ app.post('/chat', async (req, res) => {
                 }
               };
               res.write(`data: ${JSON.stringify(deltaEvent)}\n\n`);
+
+              // Track in conversation history
+              conversationHistory.push(data);
+
             } else {
-              // Final event (not partial) - skip if text already sent via partials
+              // Final event (not partial) - this is where we check for questions and generate suggestions
+              const finalText = allSentText;
+
+              // Check if AI suggestions are enabled and this is a question
+              if (isSuggestionsEnabled() && isQuestion(finalText)) {
+                if (DEBUG) console.log('Detected question, generating AI suggestions:', finalText.substring(0, 50) + '...');
+
+                try {
+                  // Generate suggestions asynchronously
+                  const suggestions = await generateSuggestions(finalText, conversationHistory);
+
+                  if (suggestions && suggestions.suggestions && suggestions.suggestions.length > 0) {
+                    // Send suggestions as an SSE event
+                    const suggestionsEvent = {
+                      id: `suggestions-${Date.now()}`,
+                      invocationId: data.invocationId,
+                      type: 'suggestions',
+                      role: 'system',
+                      content: {
+                        suggestions: suggestions.suggestions,
+                        reasoning: suggestions.reasoning,
+                        questionType: suggestions.questionType
+                      },
+                      timestamp: new Date()
+                    };
+
+                    if (DEBUG) console.log(`Generated ${suggestions.suggestions.length} AI suggestions`);
+                    res.write(`data: ${JSON.stringify(suggestionsEvent)}\n\n`);
+                  }
+                } catch (suggestionError) {
+                  console.error('Failed to generate suggestions:', suggestionError);
+                  // Don't fail the stream, just log the error
+                }
+              }
+
               if (DEBUG) console.log('Skipping final text event (already sent via partials)');
             }
           } else {
@@ -591,6 +648,7 @@ app.listen(PORT, () => {
   console.log(`☁️  Cloud Run URL: ${CLOUD_RUN_URL || 'NOT CONFIGURED'}`);
   console.log(`📦 Default App: ${DEFAULT_APP_NAME || 'NOT CONFIGURED'}`);
   console.log(`🔧 Debug mode: ${DEBUG ? 'ON' : 'OFF'}`);
+  console.log(`🤖 AI Suggestions: ${isSuggestionsEnabled() ? 'ENABLED' : 'DISABLED'}`);
   console.log(`\nAvailable endpoints:`);
   console.log(`  GET  /health`);
   console.log(`  GET  /apps`);

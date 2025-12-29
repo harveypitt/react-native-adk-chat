@@ -11,6 +11,8 @@ interface GenerateOptions {
   apiMode?: 'proxy' | 'direct';
   defaultAppName?: string;
   backendType?: 'cloud-run' | 'agent-engine';
+  enableAiSuggestions?: boolean;
+  geminiApiKey?: string;
 }
 
 export async function generateApp(options: GenerateOptions) {
@@ -22,6 +24,8 @@ export async function generateApp(options: GenerateOptions) {
     apiMode,
     defaultAppName,
     backendType,
+    enableAiSuggestions,
+    geminiApiKey,
   } = options;
   const spinner = ora('Creating app structure...').start();
 
@@ -113,6 +117,22 @@ export async function generateApp(options: GenerateOptions) {
 
     await fs.writeFile(envPath, envContent);
 
+    // Create server .env file if local server is bundled
+    if (hasLocalServer) {
+      spinner.text = 'Creating server .env file...';
+      const serverEnvPath = path.join(targetDir, 'server/.env');
+      let serverEnvContent = '';
+
+      if (enableAiSuggestions && geminiApiKey) {
+        serverEnvContent += `ENABLE_AI_SUGGESTIONS=true\n`;
+        serverEnvContent += `GEMINI_API_KEY=${geminiApiKey}\n`;
+      } else {
+        serverEnvContent += `ENABLE_AI_SUGGESTIONS=false\n`;
+      }
+
+      await fs.writeFile(serverEnvPath, serverEnvContent);
+    }
+
     spinner.succeed(chalk.green('App created successfully!'));
   } catch (error) {
     spinner.fail(chalk.red('Failed to create app'));
@@ -127,7 +147,9 @@ export async function updateAppConfig(
   defaultAppName?: string,
   backendType?: 'cloud-run' | 'agent-engine',
   isUpdateCode?: boolean,
-  isReconfigure?: boolean
+  isReconfigure?: boolean,
+  enableAiSuggestions?: boolean,
+  geminiApiKey?: string
 ) {
   let spinnerText = 'Processing...';
   if (isUpdateCode && isReconfigure) {
@@ -177,6 +199,43 @@ export async function updateAppConfig(
       }
 
       await fs.writeFile(envPath, newContent);
+
+      // Update server .env file if it exists
+      const serverEnvPath = path.join(targetDir, 'server/.env');
+      if (await fs.pathExists(serverEnvPath)) {
+        spinner.text = 'Updating server .env file...';
+        let serverEnvContent = '';
+
+        if (await fs.pathExists(serverEnvPath)) {
+          serverEnvContent = await fs.readFile(serverEnvPath, 'utf8');
+        }
+
+        let newServerContent = serverEnvContent;
+
+        const updateOrAddServer = (key: string, value: string) => {
+          const regex = new RegExp(`^${key}=.*$`, 'm');
+          const newLine = `${key}=${value}`;
+          if (regex.test(newServerContent)) {
+            newServerContent = newServerContent.replace(regex, newLine);
+          } else {
+            newServerContent =
+              newServerContent +
+              (newServerContent && !newServerContent.endsWith('\n') ? '\n' : '') +
+              newLine +
+              '\n';
+          }
+        };
+
+        if (enableAiSuggestions !== undefined) {
+          updateOrAddServer('ENABLE_AI_SUGGESTIONS', enableAiSuggestions ? 'true' : 'false');
+        }
+
+        if (geminiApiKey) {
+          updateOrAddServer('GEMINI_API_KEY', geminiApiKey);
+        }
+
+        await fs.writeFile(serverEnvPath, newServerContent);
+      }
 
       // Update src/config/constants.ts
       spinner.text = 'Updating constants...';

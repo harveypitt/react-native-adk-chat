@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { GoogleAuth } = require('google-auth-library');
+const { initializeSuggestionService, isEnabled: isSuggestionsEnabled, generateSuggestions, isQuestion } = require('./suggestionService');
 
 const app = express();
 
@@ -26,6 +27,13 @@ const auth = new GoogleAuth({
 });
 
 const REASONING_ENGINE_URL = process.env.REASONING_ENGINE_URL;
+const ENABLE_AI_SUGGESTIONS = process.env.ENABLE_AI_SUGGESTIONS === 'true';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// Initialize AI Suggestions if enabled
+if (ENABLE_AI_SUGGESTIONS) {
+  initializeSuggestionService(GEMINI_API_KEY);
+}
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -216,14 +224,87 @@ app.post('/chat', async (req, res) => {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
+    // Track conversation history for AI suggestions
+    const conversationHistory = [];
+    let currentMessageText = '';
+    let sseBuffer = '';
+
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) {
           console.log('Stream completed');
+
+          // After stream completes, check if we should generate suggestions
+          if (isSuggestionsEnabled() && isQuestion(currentMessageText)) {
+            console.log('Stream ended with question, generating AI suggestions...');
+            try {
+              const suggestions = await generateSuggestions(currentMessageText, conversationHistory);
+
+              if (suggestions && suggestions.suggestions && suggestions.suggestions.length > 0) {
+                const suggestionsEvent = {
+                  id: `suggestions-${Date.now()}`,
+                  type: 'suggestions',
+                  role: 'system',
+                  content: {
+                    suggestions: suggestions.suggestions,
+                    reasoning: suggestions.reasoning,
+                    questionType: suggestions.questionType
+                  },
+                  timestamp: new Date()
+                };
+
+                console.log(`Generated ${suggestions.suggestions.length} AI suggestions`);
+                res.write(`data: ${JSON.stringify(suggestionsEvent)}\n\n`);
+              }
+            } catch (suggestionError) {
+              console.error('Failed to generate suggestions:', suggestionError);
+            }
+          }
+
           break;
         }
+
         const chunk = decoder.decode(value, { stream: true });
+
+        // Parse SSE events to track conversation history
+        if (isSuggestionsEnabled()) {
+          sseBuffer += chunk;
+          const lines = sseBuffer.split('\n');
+
+          // Keep last line in buffer if incomplete
+          if (!sseBuffer.endsWith('\n')) {
+            sseBuffer = lines.pop() || '';
+          } else {
+            sseBuffer = '';
+          }
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('data: ')) {
+              const jsonStr = trimmed.slice(6);
+              if (jsonStr) {
+                try {
+                  const event = JSON.parse(jsonStr);
+                  conversationHistory.push(event);
+
+                  // Track text content
+                  if (event.content && event.content.parts) {
+                    for (const part of event.content.parts) {
+                      if (part.text) {
+                        currentMessageText += part.text;
+                      }
+                    }
+                  }
+                } catch (parseError) {
+                  // Ignore parse errors
+                }
+              }
+            }
+          }
+        }
+
+        // Forward chunk to client
         res.write(chunk);
       }
     } catch (streamError) {
@@ -297,6 +378,7 @@ app.listen(PORT, () => {
   console.log(`🚀 ADK Agent Proxy running on port ${PORT}`);
   console.log(`📍 Agent Engine: ${REASONING_ENGINE_URL || 'NOT CONFIGURED'}`);
   console.log(`🔐 Service Account: ${process.env.GOOGLE_APPLICATION_CREDENTIALS || 'NOT CONFIGURED'}`);
+  console.log(`🤖 AI Suggestions: ${isSuggestionsEnabled() ? 'ENABLED' : 'DISABLED'}`);
   console.log(`\nAvailable endpoints:`);
   console.log(`  GET  /health`);
   console.log(`  POST /sessions/create`);

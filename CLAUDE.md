@@ -173,11 +173,15 @@ Simpler streaming - directly forwards SSE stream from Agent Engine's `:streamQue
 - `DEFAULT_APP_NAME` (optional) - Default app name to target
 - `PORT` (default: 3000) - Server port
 - `DEBUG` (default: false) - Enable debug logging
+- `ENABLE_AI_SUGGESTIONS` (default: false) - Enable AI-powered suggestion generation
+- `GEMINI_API_KEY` (required if AI suggestions enabled) - Google AI API key for Gemini
 
 **Agent Engine Proxy:**
 - `AGENT_ENGINE_URL` (required) - URL of Agent Engine (legacy var: `REASONING_ENGINE_URL`)
 - `GOOGLE_APPLICATION_CREDENTIALS` (required) - Absolute path to service account key JSON
 - `PORT` (default: 3000) - Server port
+- `ENABLE_AI_SUGGESTIONS` (default: false) - Enable AI-powered suggestion generation
+- `GEMINI_API_KEY` (required if AI suggestions enabled) - Google AI API key for Gemini
 
 **Demo App:**
 - `EXPO_PUBLIC_PROXY_BASE_URL` (default: http://localhost:3000) - Proxy URL
@@ -259,6 +263,59 @@ let tokenCache = {
 };
 ```
 
+## AI-Powered Suggestion Generation
+
+The proxy servers now support AI-powered suggestion generation using Gemini 1.5 Flash. When enabled:
+
+**How It Works:**
+1. Monitors agent responses for diagnostic questions (text ending with "?")
+2. Uses Gemini function calling to generate structured suggestion options
+3. Automatically extracts citations from recent tool call results
+4. Returns suggestions as SSE events to the client
+
+**Configuration:**
+```bash
+export ENABLE_AI_SUGGESTIONS=true
+export GEMINI_API_KEY="your-api-key-here"  # Get from https://aistudio.google.com/app/apikey
+```
+
+**CLI Setup:**
+When using `create-adk-chat-app`, you'll be prompted:
+- "Enable AI-powered suggestion generation?"
+- If yes, you'll be asked for your Gemini API key
+
+**Suggestion Event Format (SSE):**
+```json
+{
+  "id": "suggestions-1234567890",
+  "type": "suggestions",
+  "role": "system",
+  "content": {
+    "suggestions": [
+      {
+        "text": "Equipment is in maintenance mode",
+        "value": "maintenance mode",
+        "confidence": "high",
+        "source": {
+          "tool": "get_equipment_state",
+          "field": "state"
+        }
+      }
+    ],
+    "reasoning": "Based on equipment diagnostics showing state='maintenance'",
+    "questionType": "state"
+  },
+  "timestamp": "2025-12-29T..."
+}
+```
+
+**Features:**
+- Source attribution: Suggestions include citations to specific tool calls and response fields
+- Question type detection: Identifies yes/no, choice, numeric, state, or open-ended questions
+- Context-aware: Uses conversation history and tool results to generate relevant suggestions
+- Confidence scoring: Each suggestion includes high/medium/low confidence level
+- Non-blocking: If suggestion generation fails, streaming continues normally
+
 ## Known Patterns
 
 - Demo scripts use environment variables (NOT .env files) - export them in the shell before running
@@ -266,6 +323,7 @@ let tokenCache = {
 - The client package uses TypeScript but has no build step (exports raw .ts files)
 - Proxy servers are plain Node.js/Express (no transpilation needed)
 - All streaming endpoints use Server-Sent Events (SSE), not WebSockets
+- AI suggestions use Gemini 1.5 Flash with structured JSON output mode for consistent formatting
 
 ## Troubleshooting
 

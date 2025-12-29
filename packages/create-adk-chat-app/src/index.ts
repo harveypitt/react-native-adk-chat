@@ -107,6 +107,21 @@ Examples:
             ? true
             : 'App Name is required for direct connection',
       },
+      {
+        type: 'confirm',
+        name: 'enableAiSuggestions',
+        message: 'Enable AI-powered suggestion generation? (requires Gemini API key)',
+        initial: false,
+      },
+      {
+        type: (prev) => (prev ? 'password' : null),
+        name: 'geminiApiKey',
+        message: 'Enter your Gemini API key (get one at https://aistudio.google.com/app/apikey):',
+        validate: (value) =>
+          value && value.length > 0
+            ? true
+            : 'Gemini API key is required for AI suggestions',
+      },
       ]);
 
       // Handle cancellation
@@ -124,6 +139,8 @@ Examples:
     const apiMode = configResponse.isDirect ? 'direct' : 'proxy';
     const defaultAppName = configResponse.agentAppName || '';
     const backendType = configResponse.backendType || 'cloud-run';
+    const enableAiSuggestions = configResponse.enableAiSuggestions || false;
+    const geminiApiKey = configResponse.geminiApiKey || '';
 
     // For update, use cwd if appName not provided
     const targetDir = appName
@@ -133,7 +150,7 @@ Examples:
     try {
       if (isUpdateMode) {
         // @ts-ignore
-        await updateAppConfig(targetDir, proxyUrl, apiMode, defaultAppName, backendType, isUpdate, isReconfigure);
+        await updateAppConfig(targetDir, proxyUrl, apiMode, defaultAppName, backendType, isUpdate, isReconfigure, enableAiSuggestions, geminiApiKey);
 
         if (isUpdate && isReconfigure) {
           console.log(chalk.green(`\n✅ Successfully updated code and configuration!\n`));
@@ -157,6 +174,10 @@ Examples:
           defaultAppName,
           // @ts-ignore
           backendType,
+          // @ts-ignore
+          enableAiSuggestions,
+          // @ts-ignore
+          geminiApiKey,
         });
 
         console.log(chalk.green(`\n✅ Successfully created ${appName}!\n`));
