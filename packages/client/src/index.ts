@@ -8,6 +8,12 @@ export type { Message, MessageBubbleProps, ToolCall } from "./components/Message
 export { ButtonGroup } from "./components/ButtonGroup";
 export type { ButtonGroupProps } from "./components/ButtonGroup";
 
+export { SuggestionChips } from "./components/SuggestionChips";
+export type { SuggestionChipsProps } from "./components/SuggestionChips";
+
+export { SuggestionContainer } from "./components/SuggestionContainer";
+export type { SuggestionContainerProps } from "./components/SuggestionContainer";
+
 export { default as ToolResponseDebugScreen } from "./components/ToolResponseDebugScreen";
 
 // API Clients

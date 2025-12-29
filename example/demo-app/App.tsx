@@ -20,7 +20,7 @@ import {
   type Suggestion,
   type SuggestionContent,
   ToolResponseDebugScreen,
-  ButtonGroup,
+  SuggestionContainer,
 } from "../../packages/client/src";
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -265,9 +265,9 @@ function ChatScreen({ navigation }: { navigation: any }) {
     navigation.navigate('ToolResponseDebug', { toolCall });
   };
 
-  const handleSuggestionPress = async (value: string) => {
+  const handleSuggestionSelect = async (suggestion: Suggestion) => {
     // Send the selected suggestion value as a new message
-    setInput(value);
+    setInput(suggestion.value);
     // Trigger send immediately
     setTimeout(() => handleSend(), 100);
   };
@@ -279,23 +279,14 @@ function ChatScreen({ navigation }: { navigation: any }) {
         onToolCallPress={handleToolCallPress}
       />
       {item.suggestions && item.suggestions.suggestions.length > 0 && (
-        <View style={styles.suggestionsContainer}>
-          <ButtonGroup
-            options={item.suggestions.suggestions.map((sug, idx) => ({
-              id: `${item.id}-sug-${idx}`,
-              label: sug.text,
-              value: sug.value,
-            }))}
-            onPress={handleSuggestionPress}
-            disabled={isLoading}
-            containerStyle={styles.suggestionButtons}
-          />
-          {item.suggestions.reasoning && (
-            <Text style={styles.suggestionReasoning}>
-              💡 {item.suggestions.reasoning}
-            </Text>
-          )}
-        </View>
+        <SuggestionContainer
+          suggestionContent={item.suggestions}
+          onSelect={handleSuggestionSelect}
+          disabled={isLoading}
+          showReasoning={true}
+          showConfidence={false}
+          animated={true}
+        />
       )}
     </View>
   );
@@ -498,18 +489,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
-  suggestionsContainer: {
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  suggestionButtons: {
-    marginLeft: 0,
-  },
-  suggestionReasoning: {
-    fontSize: 12,
-    color: "#6B7280",
-    fontStyle: "italic",
-    marginTop: 8,
-    marginLeft: 4,
-  },
+  // Suggestion styles are now handled by SuggestionContainer component
 });
