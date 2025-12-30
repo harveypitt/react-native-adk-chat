@@ -2,6 +2,87 @@ import fs from 'fs-extra';
 import path from 'path';
 import ora from 'ora';
 import chalk from 'chalk';
+import https from 'https';
+import { pipeline } from 'stream/promises';
+import { createGunzip } from 'zlib';
+import tar from 'tar';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+
+/**
+ * Downloads and extracts a package from the GitHub repository
+ * @param packagePath - Path within the repo (e.g., 'packages/server-cloudrun')
+ * @param targetDir - Where to extract the package
+ * @param branch - GitHub branch to download from
+ */
+async function downloadFromGitHub(
+  packagePath: string,
+  targetDir: string,
+  branch: string = 'main'
+): Promise<void> {
+  const tarballUrl = `https://github.com/harveypitt/react-native-adk-chat/archive/refs/heads/${branch}.tar.gz`;
+
+  return new Promise((resolve, reject) => {
+    https.get(tarballUrl, (response) => {
+      if (response.statusCode === 302 || response.statusCode === 301) {
+        // Follow redirect
+        https.get(response.headers.location!, (redirectResponse) => {
+          if (redirectResponse.statusCode !== 200) {
+            reject(new Error(`Failed to download: ${redirectResponse.statusCode}`));
+            return;
+          }
+
+          extractTarball(redirectResponse, packagePath, targetDir, branch, resolve, reject);
+        }).on('error', reject);
+      } else if (response.statusCode === 200) {
+        extractTarball(response, packagePath, targetDir, branch, resolve, reject);
+      } else {
+        reject(new Error(`Failed to download: ${response.statusCode}`));
+      }
+    }).on('error', reject);
+  });
+}
+
+function extractTarball(
+  response: any,
+  packagePath: string,
+  targetDir: string,
+  branch: string,
+  resolve: () => void,
+  reject: (error: Error) => void
+) {
+  const gunzip = createGunzip();
+  const extract = tar.extract({
+    cwd: path.dirname(targetDir),
+    filter: (path) => {
+      // Extract only files from the specific package
+      const repoPrefix = `react-native-adk-chat-${branch}/`;
+      const targetPrefix = repoPrefix + packagePath + '/';
+      return path.startsWith(targetPrefix);
+    },
+    strip: 0,
+    transform: (entry) => {
+      // Remove repo prefix and package path from entry path
+      const repoPrefix = `react-native-adk-chat-${branch}/`;
+      const targetPrefix = packagePath + '/';
+      if (entry.path.startsWith(repoPrefix + targetPrefix)) {
+        entry.path = path.join(
+          path.basename(targetDir),
+          entry.path.slice((repoPrefix + targetPrefix).length)
+        );
+      }
+      return entry;
+    },
+  });
+
+  response.pipe(gunzip).pipe(extract);
+
+  extract.on('finish', resolve);
+  extract.on('error', reject);
+  gunzip.on('error', reject);
+}
 
 interface GenerateOptions {
   appName: string;
@@ -42,56 +123,31 @@ export async function generateApp(options: GenerateOptions) {
     const templateDir = path.join(__dirname, '../templates', template);
     await fs.copy(templateDir, targetDir);
 
-    // Check for local client package (monorepo development)
-    const localClientPath = path.resolve(__dirname, '../../client');
-    const hasLocalClient = await fs.pathExists(path.join(localClientPath, 'package.json'));
-
-    if (hasLocalClient) {
-      spinner.text = 'Vendoring local client package...';
-      const vendorDir = path.join(targetDir, 'modules/client');
-      await fs.ensureDir(vendorDir);
-
-      await fs.copy(localClientPath, vendorDir, {
-        filter: (src) => {
-          const basename = path.basename(src);
-          return basename !== 'node_modules' && basename !== 'dist' && basename !== '.git';
-        },
-      });
-    }
-
-    // Check for local server package based on backendType
+    // Download proxy server from GitHub
     const serverPackageName =
       backendType === 'agent-engine' ? 'server-agentengine' : 'server-cloudrun';
-    const localServerPath = path.resolve(__dirname, '../../', serverPackageName);
-    const hasLocalServer = await fs.pathExists(
-      path.join(localServerPath, 'package.json')
-    );
 
-    if (hasLocalServer) {
-      spinner.text = `Vendoring local ${serverPackageName}...`;
-      const serverDir = path.join(targetDir, 'server');
-      await fs.ensureDir(serverDir);
+    spinner.text = `Downloading ${serverPackageName} from GitHub...`;
+    const serverDir = path.join(targetDir, 'server');
+    await fs.ensureDir(serverDir);
 
-      await fs.copy(localServerPath, serverDir, {
-        filter: (src) => {
-          const basename = path.basename(src);
-          return basename !== 'node_modules' && basename !== '.git';
-        },
-      });
+    try {
+      await downloadFromGitHub(`packages/${serverPackageName}`, serverDir);
+    } catch (error) {
+      spinner.warn(chalk.yellow(`Could not download proxy server from GitHub. You'll need to set it up manually.`));
+      console.error('Download error:', error);
     }
 
     spinner.text = 'Configuring package.json...';
 
-    // Update package.json with app name
+    // Update package.json with app name and scripts
     const packageJsonPath = path.join(targetDir, 'package.json');
     const packageJson = await fs.readJson(packageJsonPath);
     packageJson.name = appName;
 
-    if (hasLocalClient) {
-      packageJson.dependencies['@react-native-adk-chat/client'] = 'file:./modules/client';
-    }
-
-    if (hasLocalServer) {
+    // Configure proxy server scripts
+    const hasServer = await fs.pathExists(path.join(serverDir, 'package.json'));
+    if (hasServer) {
       packageJson.scripts['proxy'] = 'cd server && npm start';
       packageJson.scripts['postinstall'] = 'cd server && npm install';
     }
@@ -117,8 +173,8 @@ export async function generateApp(options: GenerateOptions) {
 
     await fs.writeFile(envPath, envContent);
 
-    // Create server .env file if local server is bundled
-    if (hasLocalServer) {
+    // Create server .env file if server was downloaded
+    if (hasServer) {
       spinner.text = 'Creating server .env file...';
       const serverEnvPath = path.join(targetDir, 'server/.env');
       let serverEnvContent = '';
@@ -298,82 +354,66 @@ export const PROXY_DEFAULT_APP_NAME = ENV_PROXY_DEFAULT_APP_NAME;
       }
     }
 
-    // Update bundled server and client if --update flag is used
+    // Update proxy server and dependencies if --update flag is used
     if (isUpdateCode) {
-      // Update client package
-      const localClientPath = path.resolve(__dirname, '../../client');
-      const hasLocalClient = await fs.pathExists(path.join(localClientPath, 'package.json'));
-
-      if (hasLocalClient) {
-        spinner.text = 'Updating client package from GitHub...';
-        const vendorDir = path.join(targetDir, 'modules/client');
-        if (await fs.pathExists(vendorDir)) {
-          await fs.emptyDir(vendorDir);
-          await fs.copy(localClientPath, vendorDir, {
-            filter: (src) => {
-              const basename = path.basename(src);
-              return basename !== 'node_modules' && basename !== 'dist' && basename !== '.git';
-            },
-          });
-        }
-      }
-
-      // Update server package
+      // Determine which server package to download
       const serverPackageName =
         backendType === 'agent-engine'
           ? 'server-agentengine'
           : 'server-cloudrun';
-      const localServerPath = path.resolve(
-        __dirname,
-        '../../',
-        serverPackageName
-      );
-      const hasLocalServer = await fs.pathExists(
-        path.join(localServerPath, 'package.json')
-      );
 
-      if (hasLocalServer) {
-        spinner.text = `Updating server package (${serverPackageName}) from GitHub...`;
-        const serverDir = path.join(targetDir, 'server');
-        if (await fs.pathExists(serverDir)) {
-          await fs.emptyDir(serverDir);
+      spinner.text = `Downloading latest ${serverPackageName} from GitHub...`;
+      const serverDir = path.join(targetDir, 'server');
 
-          await fs.copy(localServerPath, serverDir, {
-            filter: (src) => {
-              const basename = path.basename(src);
-              return basename !== 'node_modules' && basename !== '.git';
-            },
-          });
-        }
+      // Remove old server files
+      if (await fs.pathExists(serverDir)) {
+        await fs.emptyDir(serverDir);
+      } else {
+        await fs.ensureDir(serverDir);
+      }
+
+      // Download latest from GitHub
+      try {
+        await downloadFromGitHub(`packages/${serverPackageName}`, serverDir);
+        spinner.text = 'Installing server dependencies...';
+
+        // Run npm install in server directory
+        await execAsync('npm install', { cwd: serverDir });
+      } catch (error) {
+        spinner.warn(chalk.yellow(`Could not update proxy server from GitHub.`));
+        console.error('Update error:', error);
+      }
+
+      // Update client package by running npm install (uses GitHub reference in package.json)
+      spinner.text = 'Updating client package from GitHub...';
+      try {
+        await execAsync('npm install', { cwd: targetDir });
+      } catch (error) {
+        spinner.warn(chalk.yellow(`Could not update client package. Run 'npm install' manually.`));
+        console.error('Install error:', error);
       }
     }
 
-    // Update bundled server type if reconfiguring and backendType changed
-    if (isReconfigure && backendType) {
+    // Update proxy server type if reconfiguring and backendType changed
+    if (isReconfigure && backendType && !isUpdateCode) {
       const serverPackageName =
         backendType === 'agent-engine'
           ? 'server-agentengine'
           : 'server-cloudrun';
-      const localServerPath = path.resolve(
-        __dirname,
-        '../../',
-        serverPackageName
-      );
-      const hasLocalServer = await fs.pathExists(
-        path.join(localServerPath, 'package.json')
-      );
 
-      if (hasLocalServer) {
-        spinner.text = `Updating bundled server (${serverPackageName})...`;
-        const serverDir = path.join(targetDir, 'server');
+      spinner.text = `Downloading ${serverPackageName} from GitHub...`;
+      const serverDir = path.join(targetDir, 'server');
+
+      // Remove old server files
+      if (await fs.pathExists(serverDir)) {
         await fs.emptyDir(serverDir);
+      } else {
+        await fs.ensureDir(serverDir);
+      }
 
-        await fs.copy(localServerPath, serverDir, {
-          filter: (src) => {
-            const basename = path.basename(src);
-            return basename !== 'node_modules' && basename !== '.git';
-          },
-        });
+      // Download new server type from GitHub
+      try {
+        await downloadFromGitHub(`packages/${serverPackageName}`, serverDir);
 
         // Update package.json scripts
         const packageJsonPath = path.join(targetDir, 'package.json');
@@ -383,23 +423,15 @@ export const PROXY_DEFAULT_APP_NAME = ENV_PROXY_DEFAULT_APP_NAME;
           packageJson.scripts['proxy'] = 'cd server && npm start';
           packageJson.scripts['postinstall'] = 'cd server && npm install';
 
-          // Update start scripts to use concurrently
-          const concurrently =
-            'concurrently --kill-others --names "PROXY,APP" --prefix-colors "bgBlue.bold,bgMagenta.bold" "npm run proxy"';
-
-          packageJson.scripts['start'] = `${concurrently} "expo start"`;
-          packageJson.scripts['android'] = `${concurrently} "expo start --android"`;
-          packageJson.scripts['ios'] = `${concurrently} "expo start --ios"`;
-          packageJson.scripts['web'] = `${concurrently} "expo start --web"`;
-
-          // Add concurrently to devDependencies
-          packageJson.devDependencies = packageJson.devDependencies || {};
-          if (!packageJson.devDependencies['concurrently']) {
-            packageJson.devDependencies['concurrently'] = '^8.2.2';
-          }
-
           await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
         }
+
+        // Install server dependencies
+        spinner.text = 'Installing server dependencies...';
+        await execAsync('npm install', { cwd: serverDir });
+      } catch (error) {
+        spinner.warn(chalk.yellow(`Could not download proxy server from GitHub.`));
+        console.error('Download error:', error);
       }
     }
 

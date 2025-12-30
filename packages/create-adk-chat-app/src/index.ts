@@ -12,7 +12,7 @@ program
   .description('Create a new ADK chat application')
   .argument('[app-name]', 'Name of your app')
   .option('-t, --template <template>', 'Template to use', 'default')
-  .option('--update', 'Update bundled code (server/client) from GitHub (does not change settings)')
+  .option('--update', 'Update proxy server and dependencies from GitHub (does not change settings)')
   .option('--reconfigure', 'Update configuration settings only (proxy URL, app name, etc.)')
   .option('--proxy-url <url>', 'URL of the proxy server')
   .addHelpText('after', `

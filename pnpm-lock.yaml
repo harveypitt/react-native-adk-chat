@@ -104,6 +104,9 @@ importers:
       prompts:
         specifier: ^2.4.2
         version: 2.4.2
+      tar:
+        specifier: ^7.5.2
+        version: 7.5.2
     devDependencies:
       '@types/fs-extra':
         specifier: ^11.0.0
@@ -114,6 +117,9 @@ importers:
       '@types/prompts':
         specifier: ^2.4.0
         version: 2.4.9
+      '@types/tar':
+        specifier: ^6.1.13
+        version: 6.1.13
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
@@ -1014,6 +1020,9 @@ packages:
 
   '@types/stack-utils@2.0.3':
     resolution: {integrity: sha512-9aEbYZ3TbYMznPdcdr3SmIrLXwC/AKZXQeCf9Pgao5CKb8CyHuEX5jzWPTkvregvhRJHcpRO6BFoGW9ycaOkYw==}
+
+  '@types/tar@6.1.13':
+    resolution: {integrity: sha512-IznnlmU5f4WcGTh2ltRu/Ijpmk8wiWXfF0VA4s+HPjHZgvFggk1YaIkbo5krX/zUCzWF8N/l4+W/LNxnvAJ8nw==}
 
   '@types/yargs-parser@21.0.3':
     resolution: {integrity: sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ==}
@@ -2356,6 +2365,10 @@ packages:
 
   minimist@1.2.8:
     resolution: {integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==}
+
+  minipass@4.2.8:
+    resolution: {integrity: sha512-fNzuVyifolSLFL4NzpF+wEF4qrgqaaKX0haXPQEdQ7NKAN+WecoKMHV09YcuL/DHxrUsYQOK3MiuDf7Ip2OXfQ==}
+    engines: {node: '>=8'}
 
   minipass@7.1.2:
     resolution: {integrity: sha512-qOOzS1cBTWYF4BH8fVePDBOO9iptMnGUEZwNc/cMWnTV2nVLZ7VoNWEPHkYczZA0pdoA7dl6e7FL659nX9S2aw==}
@@ -4575,6 +4588,11 @@ snapshots:
 
   '@types/stack-utils@2.0.3': {}
 
+  '@types/tar@6.1.13':
+    dependencies:
+      '@types/node': 20.19.27
+      minipass: 4.2.8
+
   '@types/yargs-parser@21.0.3': {}
 
   '@types/yargs@17.0.34':
@@ -6251,6 +6269,8 @@ snapshots:
       brace-expansion: 2.0.2
 
   minimist@1.2.8: {}
+
+  minipass@4.2.8: {}
 
   minipass@7.1.2: {}
 
