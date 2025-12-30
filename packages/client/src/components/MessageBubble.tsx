@@ -3,25 +3,10 @@ import { View, Text, StyleSheet, Animated, TouchableOpacity, Platform } from "re
 import { Ionicons } from "@expo/vector-icons";
 import Markdown from "react-native-markdown-display";
 import { ButtonGroup } from "./ButtonGroup";
-import type { MessagePart } from "../api/types";
+import type { MessagePart, Message, ToolCall } from "../api/types";
 
-export interface ToolCall {
-  id: string; // Add id to ToolCall for tracking
-  name: string;
-  args?: any;
-  status: 'calling' | 'complete';
-  response?: any; // Add this line to store the tool's complete response
-}
-
-export interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-  isLoading?: boolean;
-  toolCalls?: ToolCall[]; // Array of tool calls
-  parts?: MessagePart[];
-}
+// Re-export types for backwards compatibility
+export type { Message, ToolCall };
 
 export interface MessageBubbleProps {
   message: Message;

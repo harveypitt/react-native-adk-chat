@@ -35,7 +35,7 @@ export class ADKClient {
         session_id: sessionId,
         new_message: {
           role: "user",
-          parts: [{ text: message }],
+          parts: [{ type: 'text', text: message }],
         },
         streaming: true,
       };

@@ -14,6 +14,20 @@ This app was created with `create-adk-chat-app`.
     npm start
     ```
 
+## Customizing Your Chat Theme
+
+Edit `theme.ts` to customize the colors and appearance of your chat interface. All theme fields are optional - uncomment and modify only the colors you want to change:
+
+```typescript
+export const theme: ChatTheme = {
+  primaryColor: '#10B981',
+  userMessageBackground: '#F3F4F6',
+  // ... see theme.ts for all available options
+};
+```
+
+Changes to your theme will automatically hot-reload during development!
+
 ## Web Development & CORS
 
 If you are developing on the **Web** (`npm run web` or `w` in Expo), you may encounter CORS errors when connecting directly to Cloud Run / Agent Engine.

@@ -17,23 +17,37 @@ This is a pnpm workspace monorepo for React Native ADK Chat - a package that pro
 
 ### Running Demo Apps
 
-The monorepo uses `concurrently` to automatically start both proxy server and demo app together:
+The monorepo uses interactive startup scripts that automatically prompt for required configuration if environment variables are not set.
 
 **Cloud Run Demo:**
 ```bash
+# Option 1: Set environment variables first (skips prompts)
 export CLOUD_RUN_URL="https://your-agent-xyz.run.app"
 export DEFAULT_APP_NAME="your-app-name"  # Optional
 pnpm demo:cloudrun
+
+# Option 2: Run without env vars (will prompt interactively)
+pnpm demo:cloudrun
+# You'll be asked for:
+# - Cloud Run URL
+# - Default App Name (optional)
 ```
 
 **Agent Engine Demo:**
 ```bash
+# Option 1: Set environment variables first (skips prompts)
 export AGENT_ENGINE_URL="https://region-project-agent.a.run.app"
 export GOOGLE_APPLICATION_CREDENTIALS="/absolute/path/to/service-account.json"
 pnpm demo:agentengine
+
+# Option 2: Run without env vars (will prompt interactively)
+pnpm demo:agentengine
+# You'll be asked for:
+# - Agent Engine URL
+# - Path to service account key file
 ```
 
-These scripts start both the proxy (on port 3000) and the demo app simultaneously with color-coded logs.
+These scripts automatically start both the proxy (on port 3000) and the demo app simultaneously with color-coded logs.
 
 ### Running Individual Components
 
@@ -130,17 +144,38 @@ Proxy Server
 Mobile App (React Native components render streamed text)
 ```
 
-### Client Components
+### Client Package Architecture (Auto-Updating)
 
-The `packages/client` package exports:
-- **Components**: `MessageBubble`, `ChatInput`, `ButtonGroup`, `ToolResponseDebugScreen`
-- **API Clients**: `ProxyClient`, `ADKClient`
-- **Types**: `Message`, `ToolCall`, `ChatRequest`, `CreateSessionResponse`, etc.
+The `packages/client` package exports high-level components that enable **continuous syncing** - users get new features via `npm update`:
+
+**High-Level Components (Recommended):**
+- `<ChatApp />` - Complete chat app with navigation (easiest to use)
+- `<ChatScreen />` - Full chat interface without navigation wrapper
+- `<ChatHeader />` - Header with status indicator and new chat button
+- `<ChatMessageList />` - Message list with auto-scroll and empty states
+
+**Individual Components (for custom layouts):**
+- `MessageBubble`, `ChatInput`, `ButtonGroup`, `SuggestionContainer`, `ToolResponseDebugScreen`
+
+**Hooks (for advanced usage):**
+- `useProxyClient()` - Memoized client initialization
+- `useChatSession()` - Session lifecycle management
+- `useChatMessages()` - Message state and streaming logic
+
+**Theme System:**
+- `ChatTheme` type with ~30 customizable color properties
+- `defaultTheme` with sensible defaults
+- Simple prop-based customization
+
+**API Clients & Types:**
+- `ProxyClient`, `ADKClient`
+- `Message`, `ToolCall`, `ChatRequest`, `CreateSessionResponse`, etc.
 
 Key client behavior:
 - Uses `workspace:*` dependencies for hot reloading during development
-- Peer dependencies: React, React Native, @expo/vector-icons
+- Peer dependencies: React, React Native, @expo/vector-icons, React Navigation
 - TypeScript with type checking via `pnpm client`
+- **Apps import components instead of scaffolding code** - enables auto-updates!
 
 ## Streaming Implementation
 

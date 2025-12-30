@@ -456,7 +456,7 @@ export class ProxyClient {
           }
 
 
-          if (onEvent) {
+          if (onEvent && eventType !== 'other') {
             onEvent(textChunk, invocationId, eventType, eventData);
           }
 
@@ -510,7 +510,7 @@ export class ProxyClient {
               }
             }
 
-            if (onEvent) {
+            if (onEvent && eventType !== 'other') {
               onEvent(textChunk, invocationId, eventType, eventData);
             }
             if (textChunk) {

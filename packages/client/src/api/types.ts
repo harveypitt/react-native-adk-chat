@@ -27,6 +27,7 @@ export interface SuggestionContent {
 
 export interface MessagePart {
   type: 'text' | 'buttons' | 'image' | 'citation';
+  text?: string;
   content?: string;
   buttons?: ButtonOption[];
   imageUrl?: string;
@@ -39,11 +40,10 @@ export interface MessagePart {
 
 export interface ToolCall {
   id: string;
-  type: 'function';
-  function: {
-    name: string;
-    arguments: string;
-  };
+  name: string;
+  args?: any;
+  status: 'calling' | 'complete';
+  response?: any;
 }
 
 export interface Message {
@@ -55,11 +55,6 @@ export interface Message {
   isLoading?: boolean;
   toolCalls?: ToolCall[];
   suggestions?: SuggestionContent;
-}
-
-// ADK API Request Types
-export interface MessagePart {
-  text: string;
 }
 
 export interface ADKMessage {

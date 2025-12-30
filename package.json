@@ -9,15 +9,15 @@
   ],
   "scripts": {
     "clean": "rm -rf node_modules packages/*/node_modules example/*/node_modules",
-    "client": "npm run dev --workspace=packages/client",
-    "demo": "pnpm start --workspace=example/demo-app",
-    "demo:agentengine": "concurrently --kill-others --names \"PROXY,DEMO_APP\" --prefix-colors \"bgBlue.bold,bgMagenta.bold\" \"PORT=3000 AGENT_ENGINE_URL=$AGENT_ENGINE_URL GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS pnpm --filter @react-native-adk-chat/server-agentengine start\" \"EXPO_PUBLIC_PROXY_BASE_URL=http://localhost:3000 pnpm --filter @react-native-adk-chat/demo-app start\"",
-    "demo:cloudrun": "concurrently --kill-others --names \"PROXY,DEMO_APP\" --prefix-colors \"bgBlue.bold,bgMagenta.bold\" \"PORT=3000 CLOUD_RUN_URL=$CLOUD_RUN_URL DEFAULT_APP_NAME=$DEFAULT_APP_NAME pnpm --filter @anthropic/adk-proxy-cloudrun start\" \"EXPO_PUBLIC_PROXY_BASE_URL=http://localhost:3000 pnpm --filter @react-native-adk-chat/demo-app start\"",
-    "install:all": "npm install && npm install --workspace=packages/server-agentengine && npm install --workspace=packages/server-cloudrun",
-    "server:agentengine": "npm run dev --workspace=packages/server-agentengine",
-    "server:agentengine:start": "npm start --workspace=packages/server-agentengine",
-    "server:cloudrun": "npm run dev --workspace=packages/server-cloudrun",
-    "server:cloudrun:start": "npm start --workspace=packages/server-cloudrun"
+    "client": "pnpm --filter @react-native-adk-chat/client dev",
+    "demo": "pnpm --filter @react-native-adk-chat/demo-app start",
+    "demo:agentengine": "node scripts/start-demo-agentengine.js",
+    "demo:cloudrun": "node scripts/start-demo-cloudrun.js",
+    "install:all": "pnpm install",
+    "server:agentengine": "pnpm --filter @react-native-adk-chat/server-agentengine dev",
+    "server:agentengine:start": "pnpm --filter @react-native-adk-chat/server-agentengine start",
+    "server:cloudrun": "pnpm --filter @anthropic/adk-proxy-cloudrun dev",
+    "server:cloudrun:start": "pnpm --filter @anthropic/adk-proxy-cloudrun start"
   },
   "keywords": [
     "react-native",
