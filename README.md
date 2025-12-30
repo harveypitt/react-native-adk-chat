@@ -22,11 +22,18 @@ This package provides pre-built React Native components and API clients to quick
 - ✅ **Streaming responses** - Real-time character-by-character AI responses
 - ✅ **Session management** - Automatic conversation tracking
 - ✅ **Authentication** - Secure Google Cloud OAuth token handling via proxy
-- ✅ **Beautiful UI** - Clean, customizable chat components
+- ✅ **Beautiful UI** - Clean, customizable chat components with theme support
+- ✅ **Auto-updating** - Import components from package, get new features via `npm update`
 - ✅ **TypeScript** - Full type safety
 - ✅ **Cross-platform** - iOS, Android, and web
 
 **Perfect for:** Developers who have deployed an ADK agent to **Google Cloud Run** or **Agent Engine** and want to build a mobile chat interface.
+
+**New in v1.0:**
+- 🎨 **Easy theming** - Customize 30+ colors via simple props
+- 🚀 **One-line integration** - Use `<ChatApp />` component for instant chat UI
+- 🔄 **Auto-updates** - `npm update` pulls latest features without breaking your code
+- 💬 **Interactive setup** - Demo scripts prompt for configuration automatically
 
 ## Architecture
 
@@ -151,42 +158,54 @@ Choose your path based on what you want to do:
 
 #### Option 1: Cloud Run Demo
 
-1. **Set up environment variables** (copy `.env.example` files):
-   ```bash
-   # From monorepo root
-   export CLOUD_RUN_URL="https://your-agent-xyz.run.app"
-   export DEFAULT_APP_NAME="your-app-name"  # Optional
-   ```
+**Just run this command - it will prompt you for required configuration:**
 
-2. **Run the demo:**
-   ```bash
-   pnpm demo:cloudrun
-   ```
-   
-   This single command uses `concurrently` to automatically:
-   - Start `server-cloudrun` proxy on `http://localhost:3000`
-   - Start the demo app configured to use that proxy
-   - Show color-coded logs for both services
+```bash
+pnpm demo:cloudrun
+```
 
-3. **Test:** Press `w`, `i`, or `a` in the terminal
+The script will interactively ask for:
+- Cloud Run URL (e.g., `https://your-agent-xyz.run.app`)
+- Default App Name (optional)
+
+Then it automatically:
+- Starts `server-cloudrun` proxy on `http://localhost:3000`
+- Starts the demo app configured to use that proxy
+- Shows color-coded logs for both services (blue for proxy, magenta for app)
+
+**To skip prompts**, set environment variables first:
+```bash
+export CLOUD_RUN_URL="https://your-agent-xyz.run.app"
+export DEFAULT_APP_NAME="your-app-name"  # Optional
+pnpm demo:cloudrun
+```
+
+**Test:** Press `w` (web), `i` (iOS), or `a` (Android) in the Expo terminal
 
 #### Option 2: Agent Engine Demo
 
-1. **Set up environment variables:**
-   ```bash
-   # From monorepo root
-   export AGENT_ENGINE_URL="https://region-project-agent.a.run.app"
-   export GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account.json"
-   ```
+**Just run this command - it will prompt you for required configuration:**
 
-2. **Run the demo:**
-   ```bash
-   pnpm demo:agentengine
-   ```
+```bash
+pnpm demo:agentengine
+```
 
-3. **Test:** Press `w`, `i`, or `a` in the terminal
+The script will interactively ask for:
+- Agent Engine URL (e.g., `https://region-project-agent.a.run.app`)
+- Path to service account key file
 
-**Note:** Both demo scripts are self-contained. You don't need to manually start proxy servers - `concurrently` handles everything.
+Then it automatically starts both proxy and demo app.
+
+**To skip prompts**, set environment variables first:
+```bash
+export AGENT_ENGINE_URL="https://region-project-agent.a.run.app"
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
+pnpm demo:agentengine
+```
+
+**Test:** Press `w`, `i`, or `a` in the Expo terminal
+
+**Note:** Both demo scripts are self-contained. You don't need to manually start proxy servers - everything starts automatically with interactive prompts if needed!
 
 ---
 
@@ -296,12 +315,90 @@ npm install github:harveypitt/react-native-adk-chat#main:packages/client
 npm install git+https://github.com/harveypitt/react-native-adk-chat.git#main:packages/client
 
 # Install peer dependencies
-npm install @expo/vector-icons react-native-safe-area-context react-native-gesture-handler react-native-screens @react-navigation/native @react-navigation/stack
+npm install @expo/vector-icons react-native-safe-area-context expo-status-bar react-native-gesture-handler react-native-screens @react-navigation/native @react-navigation/stack
 ```
 
 **Note:** The package is not yet published to npm. Install directly from GitHub using the commands above.
 
-### Basic Implementation
+### Quick Start (Recommended)
+
+**Use the complete ChatApp component for instant chat UI:**
+
+```typescript
+import React from 'react';
+import { ChatApp } from '@react-native-adk-chat/client';
+
+const PROXY_URL = __DEV__
+  ? 'http://localhost:3000'           // Development
+  : 'https://your-proxy.run.app';     // Production
+
+export default function App() {
+  return (
+    <ChatApp
+      proxyUrl={PROXY_URL}
+      userId="user_123"
+      title="My AI Assistant"
+      // Optional: Customize colors
+      theme={{
+        primaryColor: '#007AFF',
+        userMessageBackground: '#007AFF',
+        aiMessageBackground: '#F0F0F0',
+      }}
+    />
+  );
+}
+```
+
+**That's it!** You get:
+- Complete chat interface with navigation
+- Session management
+- Message streaming
+- Tool call debugging screen
+- Auto-scrolling message list
+- Loading states
+- Error handling
+
+**To get updates:** Just run `npm update @react-native-adk-chat/client` and you'll get the latest features automatically!
+
+### Theme Customization
+
+Customize colors by passing a theme object:
+
+```typescript
+import { ChatApp, ChatTheme } from '@react-native-adk-chat/client';
+
+const myTheme: ChatTheme = {
+  // Primary colors
+  primaryColor: '#007AFF',
+  backgroundColor: '#FFFFFF',
+
+  // Message bubbles
+  userMessageBackground: '#007AFF',
+  userMessageText: '#FFFFFF',
+  aiMessageBackground: '#F0F0F0',
+  aiMessageText: '#000000',
+
+  // Header
+  headerBackground: '#FFFFFF',
+  headerText: '#000000',
+  statusConnected: '#34C759',
+  statusDisconnected: '#FF3B30',
+
+  // Input
+  inputBackground: '#F9FAFB',
+  sendButtonColor: '#007AFF',
+
+  // ... 20+ more color options available
+};
+
+<ChatApp proxyUrl={PROXY_URL} theme={myTheme} />
+```
+
+See the full list of theme properties in the [Theme Reference](#theme-reference).
+
+### Advanced Usage (Custom Layout)
+
+**For custom layouts, use individual components:**
 
 ```typescript
 import React, { useState, useEffect, useRef } from 'react';
@@ -821,6 +918,63 @@ const PROXY_BASE_URL = process.env.PROXY_BASE_URL || "http://localhost:3000";
 // User ID (replace with your auth system)
 const DEFAULT_USER_ID = "user_123";
 ```
+
+## Theme Reference
+
+The `ChatTheme` interface provides 30+ customizable color properties:
+
+```typescript
+interface ChatTheme {
+  // Primary colors
+  primaryColor?: string;
+  backgroundColor?: string;
+
+  // Message bubbles
+  userMessageBackground?: string;
+  userMessageText?: string;
+  aiMessageBackground?: string;
+  aiMessageText?: string;
+  aiMessageBorder?: string;
+
+  // Input
+  inputBackground?: string;
+  inputBorder?: string;
+  inputText?: string;
+  sendButtonColor?: string;
+  sendButtonDisabled?: string;
+
+  // Header
+  headerBackground?: string;
+  headerText?: string;
+  headerBorder?: string;
+  statusConnected?: string;
+  statusDisconnected?: string;
+
+  // Suggestions
+  suggestionBorder?: string;
+  suggestionText?: string;
+  suggestionSelectedBackground?: string;
+  suggestionSelectedText?: string;
+
+  // Confidence badges
+  confidenceHigh?: string;
+  confidenceMedium?: string;
+  confidenceLow?: string;
+
+  // Tool calls
+  toolCallBackground?: string;
+  toolCallBorder?: string;
+  toolCallText?: string;
+
+  // Utility
+  emptyStateIcon?: string;
+  emptyStateText?: string;
+  errorColor?: string;
+  loadingColor?: string;
+}
+```
+
+**All properties are optional** - any you don't specify will use the default theme values.
 
 ## Customization
 
